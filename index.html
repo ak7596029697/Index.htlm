@@ -3,11 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Shipping Label PDF to Excel Extractor</title>
+  <title>Multi-PDF Label to Excel Extractor</title>
   <!-- PDF.js Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-  <!-- ZXing Barcode Scanner Engine -->
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
@@ -23,7 +21,7 @@
     button { flex: 1; padding: 12px; font-size: 14px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
     .btn-export { background: #10b981; color: white; display: none; }
     .btn-clear { background: #ef4444; color: white; display: none; flex: 0 0 60px; }
-    .results { margin-top: 20px; max-height: 420px; overflow-y: auto; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
+    .results { margin-top: 20px; max-height: 450px; overflow-y: auto; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
     th, td { padding: 10px; border-bottom: 1px solid #334155; }
     th { background: #1e293b; color: #94a3b8; position: sticky; top: 0; }
@@ -35,21 +33,22 @@
 <body>
 
   <div class="container">
-    <h1>📄 Label PDF to Excel Extractor (Barcode Enabled)</h1>
-    <p class="subtitle">Flipkart, Amazon ও Meesho শিপিং লেবেল থেকে বারকোড ও অর্ডার রিডার</p>
+    <h1>📄 Bulk Shipping Labels to Excel Extractor</h1>
+    <p class="subtitle">Flipkart, Amazon ও Meesho-র একাধিক PDF একসাথে বা পর পর যোগ করুন</p>
 
+    <!-- multiple অ্যাট্রিবিউট যুক্ত করা হয়েছে -->
     <label class="upload-box" for="pdfInput">
-      <div class="upload-icon">📦</div>
-      <div style="font-size: 15px; font-weight: bold;">শিপিং লেবেল PDF ফাইলটি বেছে নিন</div>
-      <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">(লেবেলের বারকোড স্ক্যান করে সঠিক AWB নম্বর বের করা হবে)</div>
-      <input type="file" id="pdfInput" accept="application/pdf" onchange="processPDF(this)">
+      <div class="upload-icon">📑</div>
+      <div style="font-size: 15px; font-weight: bold;">PDF ফাইল বেছে নিন (একাধিক ফাইল একসাথে দিতে পারেন)</div>
+      <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">একটি আপলোড করার পর আরেকটি দিলেও আগের ডেটা মুছবে না</div>
+      <input type="file" id="pdfInput" accept="application/pdf" multiple onchange="processMultiplePDFs(this)">
     </label>
 
     <div class="status-bar" id="statusBox"></div>
 
     <div class="controls">
-      <button class="btn-export" id="exportBtn" onclick="exportToCSV()">📥 Excel (CSV) ডাউনলোড</button>
-      <button class="btn-clear" id="clearBtn" onclick="clearData()">🗑️</button>
+      <button class="btn-export" id="exportBtn" onclick="exportToCSV()">📥 সব অর্ডারের Excel (CSV) ডাউনলোড</button>
+      <button class="btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️</button>
     </div>
 
     <div class="results" id="resultsBox" style="display:none;">
@@ -69,165 +68,146 @@
     </div>
   </div>
 
-  <canvas id="renderCanvas" style="display:none;"></canvas>
-
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
+    // গ্লোবাল ভ্যারিয়েবল (যা ফাইল বদলালেও মুছবে না)
     let extractedData = [];
-    const codeReader = new ZXing.BrowserMultiFormatReader();
+    let seenOrderIds = new Set();
+    let duplicateCount = 0;
 
-    // প্ল্যাটফর্ম ও অর্ডার আইডি প্যাটার্ন
     const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
     const meeshoOrderRegex   = /\b\d{16,20}_\d+\b/;
 
-    // কুরিয়ার কোম্পানির নাম শনাক্তকরণ
-    function getCourierPartner(text) {
+    function detectCourier(text, trackingId) {
       if (/Delhivery/i.test(text)) return "Delhivery";
       if (/Xpressbees|Xpress\s*bees|\bXB\b/i.test(text)) return "Xpressbees";
       if (/Shadowfax|\bSF\b/i.test(text)) return "Shadowfax";
       if (/Ekart|eKart/i.test(text)) return "Ekart";
       if (/Ecom\s*Express/i.test(text)) return "Ecom Express";
       if (/Amazon\s*Shipping|ATS/i.test(text)) return "Amazon Shipping";
-      if (/DTDC/i.test(text)) return "DTDC";
-      if (/Bluedart|Blue\s*Dart/i.test(text)) return "Blue Dart";
+
+      if (trackingId.startsWith("1340") || (trackingId.startsWith("14") && trackingId.length >= 14)) {
+        return "Xpressbees";
+      }
+      if (trackingId.startsWith("SF") || trackingId.startsWith("sf")) {
+        return "Shadowfax";
+      }
+      if (trackingId.startsWith("FMPC") || trackingId.startsWith("FMPP")) {
+        return "Ekart";
+      }
+      if (/^(12|13|14|33)\d{10,12}$/.test(trackingId)) {
+        return "Delhivery";
+      }
+
       return "অন্যান্য";
     }
 
-    // PDF পেজের ছবি রেন্ডার করে বারকোড রিড করার ফাংশন
-    async function scanBarcodeFromPage(page) {
-      try {
-        const viewport = page.getViewport({ scale: 2.0 });
-        const canvas = document.getElementById('renderCanvas');
-        const ctx = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+    function findTrackingNumber(text, rawOrderId) {
+      const pureOrderId = rawOrderId.replace(/_\d+$/, '');
+      const cleanedSpacedText = text.replace(/(\d)\s+(\d)\s+(\d)\s+(\d)/g, '$1$2$3$4');
 
-        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-        const result = await codeReader.decodeFromCanvas(canvas);
-        if (result && result.text) {
-          return result.text.trim();
-        }
-      } catch (e) {
-        // বারকোড রিড না হলে টেক্সট ব্যাকআপ চলবে
-      }
-      return null;
-    }
-
-    // টেক্সট থেকে ট্র্যাকিং নম্বর খোঁজার ব্যাকআপ নিয়ম
-    function extractTrackingFromText(text, orderId) {
-      const awbMatch = text.match(/(?:AWB|TRACKING|WAYBILL|AIRWAY)[:\s#-]*([A-Z0-9]{8,22})/i);
-      if (awbMatch && awbMatch[1] && awbMatch[1] !== orderId) {
-        return awbMatch[1].trim();
+      const prefixMatch = cleanedSpacedText.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{10,20})/i);
+      if (prefixMatch && prefixMatch[1] && !prefixMatch[1].includes(pureOrderId)) {
+        return prefixMatch[1].trim();
       }
 
-      // দিল্লিভারি বা অন্যান্য কুরিয়ারের ১০-১৬ ডিজিটের নম্বর
-      const allNumbers = text.match(/\b[0-9]{10,16}\b/g) || [];
+      const specialMatch = cleanedSpacedText.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+|SF\d{9,16})\b/i);
+      if (specialMatch && specialMatch[0]) {
+        return specialMatch[0].trim();
+      }
+
+      const allNumbers = cleanedSpacedText.match(/\b\d{12,16}\b/g) || [];
       for (let num of allNumbers) {
         let clean = num.trim();
-        if (clean !== orderId && !clean.startsWith("19") && !clean.startsWith("202")) {
+        if (clean !== pureOrderId && !clean.startsWith("2026") && !clean.startsWith("2025") && !clean.startsWith("19")) {
           return clean;
         }
       }
 
-      const specificPatterns = [
-        /\b(FMPC[A-Z0-9]+)\b/i,
-        /\b(FMPP[A-Z0-9]+)\b/i,
-        /\b(SF\d{9,16})\b/i
-      ];
-      for (let reg of specificPatterns) {
-        let m = text.match(reg);
-        if (m && m[0] !== orderId) return m[0].trim();
+      const tenDigitNumbers = cleanedSpacedText.match(/\b\d{10,11}\b/g) || [];
+      for (let num of tenDigitNumbers) {
+        let clean = num.trim();
+        if (clean !== pureOrderId && !clean.startsWith("91") && !clean.startsWith("202")) {
+          return clean;
+        }
       }
 
       return "নেই";
     }
 
-    async function processPDF(input) {
-      const file = input.files[0];
-      if (!file) return;
-
-      extractedData = [];
-      const seenOrderIds = new Set();
-      let duplicateCount = 0;
+    async function processMultiplePDFs(input) {
+      const files = input.files;
+      if (!files || files.length === 0) return;
 
       const statusBox = document.getElementById('statusBox');
-      const exportBtn = document.getElementById('exportBtn');
-      const clearBtn = document.getElementById('clearBtn');
-      const resultsBox = document.getElementById('resultsBox');
-      const tableBody = document.getElementById('tableBody');
+      statusBox.innerHTML = `⏳ মোট ${files.length} টি ফাইল প্রসেস করা হচ্ছে...`;
 
-      tableBody.innerHTML = '';
-      resultsBox.style.display = 'none';
-      exportBtn.style.display = 'none';
-      clearBtn.style.display = 'none';
-      statusBox.innerHTML = "⏳ PDF ও বারকোড প্রসেস হচ্ছে...";
+      for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+        const file = files[fileIndex];
+        statusBox.innerHTML = `⏳ ফাইল (${fileIndex + 1}/${files.length}) প্রসেস হচ্ছে: <b>${file.name}</b>`;
 
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const totalPages = pdf.numPages;
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          const totalPages = pdf.numPages;
 
-        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-          statusBox.innerHTML = `⏳ পেজ ও বারকোড স্ক্যান হচ্ছে: ${pageNum} / ${totalPages}`;
-          const page = await pdf.getPage(pageNum);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map(item => item.str).join(' ');
+          for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
+            const pageText = items.join(' ');
 
-          let platform = "অন্যান্য";
-          let orderId = "";
+            let platform = "অন্যান্য";
+            let orderId = "";
 
-          // ১. প্ল্যাটফর্ম ও অর্ডার আইডি নির্ধারণ
-          if (flipkartOrderRegex.test(pageText)) {
-            platform = "Flipkart";
-            orderId = pageText.match(flipkartOrderRegex)[0];
-          } else if (amazonOrderRegex.test(pageText)) {
-            platform = "Amazon";
-            orderId = pageText.match(amazonOrderRegex)[0];
-          } else if (meeshoOrderRegex.test(pageText)) {
-            platform = "Meesho";
-            orderId = pageText.match(meeshoOrderRegex)[0];
-          }
-
-          let courier = getCourierPartner(pageText);
-
-          // ২. প্রথমে সরাসরি লেবেলের ছবি থেকে বারকোড স্ক্যান
-          let trackingId = await scanBarcodeFromPage(page);
-
-          // যদি বারকোড স্ক্যান কোনো কারণে না হয়, তবে টেক্সট থেকে খোঁজা
-          if (!trackingId || trackingId === orderId) {
-            trackingId = extractTrackingFromText(pageText, orderId);
-          }
-
-          if (orderId) {
-            let isDuplicate = seenOrderIds.has(orderId);
-            if (isDuplicate) {
-              duplicateCount++;
-            } else {
-              seenOrderIds.add(orderId);
+            if (flipkartOrderRegex.test(pageText)) {
+              platform = "Flipkart";
+              orderId = pageText.match(flipkartOrderRegex)[0];
+            } else if (amazonOrderRegex.test(pageText)) {
+              platform = "Amazon";
+              orderId = pageText.match(amazonOrderRegex)[0];
+            } else if (meeshoOrderRegex.test(pageText)) {
+              platform = "Meesho";
+              orderId = pageText.match(meeshoOrderRegex)[0];
             }
 
-            extractedData.push({
-              platform: platform,
-              courier: courier,
-              orderId: orderId,
-              trackingId: trackingId || "নেই",
-              status: isDuplicate ? "Duplicate" : "Unique",
-              page: pageNum
-            });
-          }
-        }
+            if (orderId) {
+              let trackingId = findTrackingNumber(pageText, orderId);
+              let courier = detectCourier(pageText, trackingId);
 
-        let summaryText = `✅ মোট <b>${extractedData.length}</b> টি পার্সেল সম্পন্ন!`;
-        if (duplicateCount > 0) {
-          summaryText += ` (⚠️ <b>${duplicateCount}</b> টি ডুপ্লিকেট শনাক্ত)`;
+              // ডুপ্লিকেট যাচাই
+              let isDuplicate = seenOrderIds.has(orderId);
+              if (isDuplicate) {
+                duplicateCount++;
+              } else {
+                seenOrderIds.add(orderId);
+              }
+
+              // আগের তালিকার নিচে নতুন করে যোগ করা (Append)
+              extractedData.push({
+                platform: platform,
+                courier: courier,
+                orderId: orderId,
+                trackingId: trackingId,
+                status: isDuplicate ? "Duplicate" : "Unique",
+                sourceFile: file.name
+              });
+            }
+          }
+        } catch (err) {
+          console.error(err);
         }
-        statusBox.innerHTML = summaryText;
-        renderTable();
-      } catch (err) {
-        statusBox.innerHTML = "❌ ফাইল পড়তে সমস্যা হয়েছে! সঠিক শিপিং লেবেল PDF দিন।";
       }
+
+      let summaryText = `✅ মোট জমা হয়েছে: <b>${extractedData.length}</b> টি অর্ডার।`;
+      if (duplicateCount > 0) {
+        summaryText += ` (⚠️ ডুপ্লিকেট: <b>${duplicateCount}</b> টি)`;
+      }
+      statusBox.innerHTML = summaryText;
+      renderTable();
+      input.value = ''; // ইনপুট রিসেট যাতে একই ফাইল চাইলে পুনরায় সিলেক্ট করা যায়
     }
 
     function renderTable() {
@@ -242,9 +222,9 @@
           <td>${i + 1}</td>
           <td><span class="${badgeClass}">${badgeText}</span></td>
           <td><b>${row.platform}</b></td>
-          <td><span style="color:#38bdf8;">${row.courier}</span></td>
+          <td><span style="color:#38bdf8; font-weight:bold;">${row.courier}</span></td>
           <td>${row.orderId}</td>
-          <td>${row.trackingId}</td>
+          <td style="color:${row.trackingId === 'নেই' ? '#f87171' : '#34d399'}; font-weight:bold;">${row.trackingId}</td>
         `;
         tableBody.appendChild(tr);
       });
@@ -268,11 +248,13 @@
 
     function clearData() {
       extractedData = [];
+      seenOrderIds.clear();
+      duplicateCount = 0;
       document.getElementById('tableBody').innerHTML = '';
       document.getElementById('resultsBox').style.display = 'none';
       document.getElementById('exportBtn').style.display = 'none';
       document.getElementById('clearBtn').style.display = 'none';
-      document.getElementById('statusBox').innerHTML = 'ক্লিয়ার করা হয়েছে।';
+      document.getElementById('statusBox').innerHTML = 'সব তথ্য ক্লিয়ার করা হয়েছে। নতুন করে ফাইল দিন।';
       document.getElementById('pdfInput').value = '';
     }
   </script>
