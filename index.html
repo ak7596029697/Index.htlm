@@ -30,7 +30,7 @@
     .return-input-group input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; background: #1e293b; color: white; font-family: monospace; font-size: 13px; }
     .return-input-group button { padding: 8px 14px; border-radius: 6px; border: none; background: #f59e0b; color: #000; font-weight: bold; cursor: pointer; }
 
-    .status-bar { margin-top: 15px; font-size: 14px; text-align: center; font-weight: bold; color: #38bdf8; min-height: 24px; padding: 6px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); }
+    .status-bar { margin-top: 15px; font-size: 14px; text-align: center; font-weight: bold; color: #38bdf8; min-height: 26px; padding: 6px 10px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); }
     .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
     button.action-btn { padding: 10px 14px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
     
@@ -195,63 +195,71 @@
     }
 
     function detectCourier(text, trackingId, platform) {
-      if (trackingId.toUpperCase().startsWith("SF") || /Shadowfax|dowfax|\bSF\b/i.test(text)) return "Shadowfax";
+      if (trackingId.toUpperCase().startsWith("SF") || /Shadowfax|dowfax/i.test(text)) return "Shadowfax";
+      if (trackingId.startsWith("1340") || (trackingId.startsWith("14") && trackingId.length >= 14) || /Xpressbees|Xpress\s*bees|\bXB\b/i.test(text)) return "Xpressbees";
       if (platform === "Amazon" || /ATSPL|ATS|Amazon\s*Shipping/i.test(text)) return "Amazon Shipping (ATS)";
-      if (/Delhivery/i.test(text)) return "Delhivery";
-      if (/Xpressbees|Xpress\s*bees|\bXB\b/i.test(text)) return "Xpressbees";
-      if (/Ekart|eKart/i.test(text)) return "Ekart";
+      if (/Delhivery/i.test(text) || (/^(12|13|14|33|37)\d{10,12}$/.test(trackingId) && platform !== "Amazon")) return "Delhivery";
+      if (/Ekart|eKart/i.test(text) || trackingId.startsWith("FMPC") || trackingId.startsWith("FMPP")) return "Ekart";
       if (/Ecom\s*Express/i.test(text)) return "Ecom Express";
-
-      if (trackingId.startsWith("1340") || (trackingId.startsWith("14") && trackingId.length >= 14)) return "Xpressbees";
-      if (trackingId.startsWith("FMPC") || trackingId.startsWith("FMPP")) return "Ekart";
-      if (/^(12|13|14|33|37)\d{10,12}$/.test(trackingId)) {
-        return platform === "Amazon" ? "Amazon Shipping (ATS)" : "Delhivery";
-      }
 
       return "অন্যান্য";
     }
 
+    // Delhivery, Xpressbees, Shadowfax ও Amazon নিখুঁতভাবে ধরার ফাংশন
     function findTrackingNumber(text, rawOrderId, platform) {
       const pureOrderId = rawOrderId.replace(/_\d+$/, '');
 
-      // ১. Shadowfax সরাসরি রিড (যেমন SF4006123782FPL বা মাঝে স্পেস থাকলেও)
+      // ১. Shadowfax সরাসরি রিড (যেমন SF4006123782FPL বা SF এর পর ডিজিট)
       const sfDirect = text.match(/\bSF\s*([0-9]{8,14}\s*[A-Z]{0,5})\b/i);
       if (sfDirect && sfDirect[1]) {
         return ("SF" + sfDirect[1].replace(/\s+/g, '')).toUpperCase();
       }
 
-      // স্পেস জোড়া দেওয়া ভার্সন
-      const cleanedSpacedText = text.replace(/([A-Za-z0-9])\s+([A-Za-z0-9])/g, '$1$2').replace(/([A-Za-z0-9])\s+([A-Za-z0-9])/g, '$1$2');
-
-      const sfCleaned = cleanedSpacedText.match(/\b(SF[0-9]{8,14}[A-Z]{0,5})\b/i);
-      if (sfCleaned && sfCleaned[1]) {
-        return sfCleaned[1].toUpperCase();
+      // ২. লেবেলের ট্যাগ অনুযায়ী (AWB, Waybill, Tracking No) সরাসরি খোঁজা
+      const tagMatch = text.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{10,22})/i);
+      if (tagMatch && tagMatch[1]) {
+        let cleanTagVal = tagMatch[1].trim();
+        if (!cleanTagVal.includes(pureOrderId)) return cleanTagVal;
       }
 
-      // ২. Amazon AWB সরাসরি রিড
+      // ৩. Amazon সরাসরি AWB
       const amzAwbDirect = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
       if (amzAwbDirect && amzAwbDirect[1]) return amzAwbDirect[1].trim();
 
-      // ৩. সাধারণ ট্যাগ
-      const prefixMatch = cleanedSpacedText.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{8,22})/i);
-      if (prefixMatch && prefixMatch[1] && !prefixMatch[1].includes(pureOrderId)) return prefixMatch[1].trim();
-
-      // ৪. স্পেশাল প্রিফিক্স কোড (FMPC, FMPP, SF, IN, TBA)
-      const specialMatch = cleanedSpacedText.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+|SF[A-Z0-9]{8,16}|IN\d{8,14}|TBA\d{9,15})\b/i);
-      if (specialMatch && specialMatch[0]) return specialMatch[0].trim();
-
-      // ৫. ১২ থেকে ১৬ ডিজিটের নম্বর
-      const allNumbers = cleanedSpacedText.match(/\b\d{12,16}\b/g) || [];
-      for (let num of allNumbers) {
-        let clean = num.trim();
-        if (clean !== pureOrderId && !clean.startsWith("2026") && !clean.startsWith("2025") && !clean.startsWith("19")) return clean;
+      // ৪. Xpressbees নির্দিষ্ট ফরম্যাট: ১৪ থেকে ১৬ ডিজিটের নম্বর (যা সাধারণত 14 বা 13 দিয়ে শুরু)
+      const xbMatch = text.match(/\b(14\d{12,14}|134\d{11,13})\b/g);
+      if (xbMatch) {
+        for (let num of xbMatch) {
+          if (num !== pureOrderId) return num.trim();
+        }
       }
 
-      // ৬. ১০ থেকে ১১ ডিজিটের নম্বর
-      const tenDigitNumbers = cleanedSpacedText.match(/\b\d{10,11}\b/g) || [];
-      for (let num of tenDigitNumbers) {
+      // ৫. Delhivery নির্দিষ্ট ফরম্যাট: ১২ থেকে ১৩ ডিজিটের নম্বর (যেমন 12..., 13..., 14..., 33..., 37...)
+      const dlMatch = text.match(/\b(12\d{10,11}|13\d{10,11}|14\d{10,11}|33\d{10,11}|37\d{10,11})\b/g);
+      if (dlMatch) {
+        for (let num of dlMatch) {
+          if (num !== pureOrderId) return num.trim();
+        }
+      }
+
+      // ৬. Ekart প্রিফিক্স
+      const ekartMatch = text.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+)\b/i);
+      if (ekartMatch) return ekartMatch[0].trim();
+
+      // ৭. সাধারণ ব্যাকআপ: যেকোনো ১২ থেকে ১৬ ডিজিটের নম্বর (তারিখ বাদ দিয়ে)
+      const allNumbers = text.match(/\b\d{12,16}\b/g) || [];
+      for (let num of allNumbers) {
         let clean = num.trim();
-        if (clean !== pureOrderId && !clean.startsWith("91") && !clean.startsWith("202")) return clean;
+        if (clean !== pureOrderId && !clean.startsWith("2026") && !clean.startsWith("2025") && !clean.startsWith("19")) {
+          return clean;
+        }
+      }
+
+      // ৮. যদি মাঝে স্পেস থাকে (যেমন "1 4 0 2 3 ...")
+      const digitSpacedMatch = text.match(/(?:\b|\s)((?:\d\s+){11,15}\d)(?:\b|\s)/);
+      if (digitSpacedMatch && digitSpacedMatch[1]) {
+        let joined = digitSpacedMatch[1].replace(/\s+/g, '');
+        if (joined !== pureOrderId) return joined;
       }
 
       return "নেই";
@@ -393,7 +401,7 @@
           cName = "Ekart";
         } else if (meeshoOrderRegex.test(searchKey)) {
           pForm = "Meesho";
-          cName = "Shadowfax / Delhivery";
+          cName = "Shadowfax / Delhivery / Xpressbees";
         }
 
         extractedData.unshift({
@@ -407,7 +415,7 @@
       }
 
       updateUI(refreshDuplicateStatus());
-      document.getElementById('statusBox').innerHTML = `⚠️ <b>${searchKey}</b> রিটার্ন চিহ্নিত হয়েছে! সেভ রাখতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
+      document.getElementById('statusBox').innerHTML = `🔄 <b>${searchKey}</b> রিটার্ন হিসেবে চিহ্নিত হয়েছে! সেভ রাখতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
     }
 
     async function processReturnPDFs(input) {
@@ -466,12 +474,12 @@
       const statusBox = document.getElementById('statusBox');
       let returnCount = extractedData.filter(d => d.status === "Returned").length;
       
-      let summaryText = `✅ মোট আছে: <b>${extractedData.length}</b> টি অর্ডার।`;
+      let summaryText = `📦 মোট আছে: <b>${extractedData.length}</b> টি অর্ডার।`;
       if (newlyAddedCount > 0) {
         summaryText += ` (📥 নতুন যোগ হয়েছে: <b style="color:#34d399;">${newlyAddedCount}</b> টি)`;
       }
       if (duplicateCount > 0) {
-        summaryText += ` (⚠️ ডুপ্লিকেট: <b style="color:#f87171;">${duplicateCount}</b> টি)`;
+        summaryText += ` (🚫 ডুপ্লিকেট: <b style="color:#f87171;">${duplicateCount}</b> টি)`;
       }
       if (returnCount > 0) {
         summaryText += ` (🔄 রিটার্ন: <b style="color:#f59e0b;">${returnCount}</b> টি)`;
@@ -495,10 +503,10 @@
 
         if (row.status === 'Duplicate') {
           badgeClass = 'badge-duplicate';
-          badgeText = 'ডুপ্লিকেট';
+          badgeText = '🚫 ডুপ্লিকেট';
         } else if (row.status === 'Returned') {
           badgeClass = 'badge-returned';
-          badgeText = '⚠️ রিটার্ন এসেছে';
+          badgeText = '🔄 রিটার্ন এসেছে';
           tr.className = 'row-returned';
         }
 
