@@ -3,52 +3,55 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Multi-PDF Label to Excel Extractor</title>
+  <title>Bulk Shipping Labels Extractor</title>
   <!-- PDF.js Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-    .container { width: 100%; max-width: 950px; background: #1e293b; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    .container { width: 100%; max-width: 980px; background: #1e293b; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
     h1 { font-size: 20px; color: #38bdf8; text-align: center; margin-bottom: 6px; }
     p.subtitle { font-size: 13px; color: #94a3b8; text-align: center; margin-bottom: 20px; }
-    .upload-box { border: 2px dashed #38bdf8; border-radius: 8px; padding: 30px 15px; text-align: center; cursor: pointer; background: rgba(56, 189, 248, 0.05); }
+    .upload-box { border: 2px dashed #38bdf8; border-radius: 8px; padding: 25px 15px; text-align: center; cursor: pointer; background: rgba(56, 189, 248, 0.05); }
     .upload-box:hover { background: rgba(56, 189, 248, 0.1); }
     input[type="file"] { display: none; }
-    .upload-icon { font-size: 40px; margin-bottom: 10px; }
+    .upload-icon { font-size: 38px; margin-bottom: 8px; }
     .status-bar { margin-top: 15px; font-size: 14px; text-align: center; font-weight: bold; color: #38bdf8; min-height: 20px; }
-    .controls { display: flex; gap: 10px; margin-top: 20px; }
-    button { flex: 1; padding: 12px; font-size: 14px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
-    .btn-export { background: #10b981; color: white; display: none; }
-    .btn-clear { background: #ef4444; color: white; display: none; flex: 0 0 60px; }
+    .controls { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+    button { padding: 10px 14px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
+    .btn-export { background: #10b981; color: white; display: none; flex: 2; }
+    .btn-remove-dup { background: #f59e0b; color: white; display: none; flex: 1.5; }
+    .btn-clear { background: #ef4444; color: white; display: none; width: 45px; }
     .results { margin-top: 20px; max-height: 450px; overflow-y: auto; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
-    th, td { padding: 10px; border-bottom: 1px solid #334155; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid #334155; }
     th { background: #1e293b; color: #94a3b8; position: sticky; top: 0; }
     td { font-family: monospace; }
     .badge-unique { background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; }
     .badge-duplicate { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; }
+    .btn-del-row { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 14px; padding: 2px 6px; }
+    .btn-del-row:hover { background: rgba(239, 68, 68, 0.2); border-radius: 4px; }
   </style>
 </head>
 <body>
 
   <div class="container">
-    <h1>📄 Bulk Shipping Labels to Excel Extractor</h1>
-    <p class="subtitle">Flipkart, Amazon ও Meesho-র একাধিক PDF একসাথে বা পর পর যোগ করুন</p>
+    <h1>📄 Bulk Shipping Labels Extractor</h1>
+    <p class="subtitle">Flipkart, Amazon ও Meesho-র শিপিং লেবেল থেকে এক্সেল ও উন্নত ডুপ্লিকেট ম্যানেজার</p>
 
-    <!-- multiple অ্যাট্রিবিউট যুক্ত করা হয়েছে -->
     <label class="upload-box" for="pdfInput">
       <div class="upload-icon">📑</div>
       <div style="font-size: 15px; font-weight: bold;">PDF ফাইল বেছে নিন (একাধিক ফাইল একসাথে দিতে পারেন)</div>
-      <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">একটি আপলোড করার পর আরেকটি দিলেও আগের ডেটা মুছবে না</div>
+      <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">একটি আপলোড করার পর আরেকটি দিলেও আগের ডেটা থাকবে</div>
       <input type="file" id="pdfInput" accept="application/pdf" multiple onchange="processMultiplePDFs(this)">
     </label>
 
     <div class="status-bar" id="statusBox"></div>
 
     <div class="controls">
-      <button class="btn-export" id="exportBtn" onclick="exportToCSV()">📥 সব অর্ডারের Excel (CSV) ডাউনলোড</button>
-      <button class="btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️</button>
+      <button class="btn-export" id="exportBtn" onclick="exportToCSV()">📥 Excel (CSV) ডাউনলোড</button>
+      <button class="btn-remove-dup" id="removeDupBtn" onclick="removeOnlyDuplicates()">🧹 শুধু ডুপ্লিকেটগুলো মুছুন</button>
+      <button class="btn-clear" id="clearBtn" onclick="clearData()" title="সব একসাথে মুছুন">🗑️</button>
     </div>
 
     <div class="results" id="resultsBox" style="display:none;">
@@ -61,6 +64,7 @@
             <th>কুরিয়ার পার্টনার</th>
             <th>অর্ডার আইডি</th>
             <th>ট্র্যাকিং আইডি (AWB)</th>
+            <th style="text-align:center;">অ্যাকশন</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
@@ -71,22 +75,19 @@
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-    // গ্লোবাল ভ্যারিয়েবল (যা ফাইল বদলালেও মুছবে না)
     let extractedData = [];
-    let seenOrderIds = new Set();
-    let duplicateCount = 0;
 
     const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
     const meeshoOrderRegex   = /\b\d{16,20}_\d+\b/;
 
-    function detectCourier(text, trackingId) {
+    function detectCourier(text, trackingId, platform) {
       if (/Delhivery/i.test(text)) return "Delhivery";
       if (/Xpressbees|Xpress\s*bees|\bXB\b/i.test(text)) return "Xpressbees";
       if (/Shadowfax|\bSF\b/i.test(text)) return "Shadowfax";
       if (/Ekart|eKart/i.test(text)) return "Ekart";
       if (/Ecom\s*Express/i.test(text)) return "Ecom Express";
-      if (/Amazon\s*Shipping|ATS/i.test(text)) return "Amazon Shipping";
+      if (/Amazon\s*Shipping|ATS|Amazon\s*Transportation/i.test(text) || platform === "Amazon") return "Amazon Shipping";
 
       if (trackingId.startsWith("1340") || (trackingId.startsWith("14") && trackingId.length >= 14)) {
         return "Xpressbees";
@@ -104,20 +105,35 @@
       return "অন্যান্য";
     }
 
-    function findTrackingNumber(text, rawOrderId) {
+    function findTrackingNumber(text, rawOrderId, platform) {
       const pureOrderId = rawOrderId.replace(/_\d+$/, '');
       const cleanedSpacedText = text.replace(/(\d)\s+(\d)\s+(\d)\s+(\d)/g, '$1$2$3$4');
 
-      const prefixMatch = cleanedSpacedText.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{10,20})/i);
+      // ১. Amazon এর নির্দিষ্ট ট্র্যাকিং ফরম্যাট (Tracking ID / AWB / TBA / IN...)
+      if (platform === "Amazon") {
+        const amzPrefix = cleanedSpacedText.match(/(?:Tracking\s*(?:ID|#|No)|AWB(?:\s*No)?|TRK#)[:\s#-]*([A-Z0-9]{9,22})/i);
+        if (amzPrefix && amzPrefix[1] && amzPrefix[1] !== pureOrderId) {
+          return amzPrefix[1].trim();
+        }
+        const amzSpecific = cleanedSpacedText.match(/\b(IN[0-9]{8,14}|TBA[0-9]{9,15})\b/i);
+        if (amzSpecific && amzSpecific[0]) {
+          return amzSpecific[0].trim();
+        }
+      }
+
+      // ২. সাধারণ AWB / Waybill / Tracking ট্যাগ
+      const prefixMatch = cleanedSpacedText.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{10,22})/i);
       if (prefixMatch && prefixMatch[1] && !prefixMatch[1].includes(pureOrderId)) {
         return prefixMatch[1].trim();
       }
 
+      // ৩. নির্দিষ্ট কুরিয়ার কোড (FMPC, FMPP, Shadowfax SF)
       const specialMatch = cleanedSpacedText.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+|SF\d{9,16})\b/i);
       if (specialMatch && specialMatch[0]) {
         return specialMatch[0].trim();
       }
 
+      // ৪. ১২ থেকে ১৬ ডিজিটের নম্বর খোঁজা
       const allNumbers = cleanedSpacedText.match(/\b\d{12,16}\b/g) || [];
       for (let num of allNumbers) {
         let clean = num.trim();
@@ -126,6 +142,7 @@
         }
       }
 
+      // ৫. ১০-১১ ডিজিটের নম্বর
       const tenDigitNumbers = cleanedSpacedText.match(/\b\d{10,11}\b/g) || [];
       for (let num of tenDigitNumbers) {
         let clean = num.trim();
@@ -135,6 +152,22 @@
       }
 
       return "নেই";
+    }
+
+    // পুরো তালিকার স্ট্যাটাস নতুন করে হিসাব করা
+    function refreshDuplicateStatus() {
+      const seen = new Set();
+      let dupCount = 0;
+      extractedData.forEach(item => {
+        if (seen.has(item.orderId)) {
+          item.status = "Duplicate";
+          dupCount++;
+        } else {
+          item.status = "Unique";
+          seen.add(item.orderId);
+        }
+      });
+      return dupCount;
     }
 
     async function processMultiplePDFs(input) {
@@ -174,25 +207,15 @@
             }
 
             if (orderId) {
-              let trackingId = findTrackingNumber(pageText, orderId);
-              let courier = detectCourier(pageText, trackingId);
+              let trackingId = findTrackingNumber(pageText, orderId, platform);
+              let courier = detectCourier(pageText, trackingId, platform);
 
-              // ডুপ্লিকেট যাচাই
-              let isDuplicate = seenOrderIds.has(orderId);
-              if (isDuplicate) {
-                duplicateCount++;
-              } else {
-                seenOrderIds.add(orderId);
-              }
-
-              // আগের তালিকার নিচে নতুন করে যোগ করা (Append)
               extractedData.push({
                 platform: platform,
                 courier: courier,
                 orderId: orderId,
                 trackingId: trackingId,
-                status: isDuplicate ? "Duplicate" : "Unique",
-                sourceFile: file.name
+                status: "Unique"
               });
             }
           }
@@ -201,19 +224,47 @@
         }
       }
 
-      let summaryText = `✅ মোট জমা হয়েছে: <b>${extractedData.length}</b> টি অর্ডার।`;
+      const duplicateCount = refreshDuplicateStatus();
+      updateUI(duplicateCount);
+      input.value = '';
+    }
+
+    // শুধু ডুপ্লিকেট এন্ট্রিগুলো মুছে ফেলা
+    function removeOnlyDuplicates() {
+      const initialCount = extractedData.length;
+      extractedData = extractedData.filter(item => item.status === "Unique");
+      const removedCount = initialCount - extractedData.length;
+      
+      refreshDuplicateStatus();
+      updateUI(0);
+      document.getElementById('statusBox').innerHTML = `🧹 <b>${removedCount}</b> টি ডুপ্লিকেট এন্ট্রি মুছে দেওয়া হয়েছে!`;
+    }
+
+    // নির্দিষ্ট কোনো এন্ট্রি ডিলিট করা
+    function deleteSingleRow(index) {
+      extractedData.splice(index, 1);
+      const dupCount = refreshDuplicateStatus();
+      updateUI(dupCount);
+    }
+
+    function updateUI(duplicateCount) {
+      const statusBox = document.getElementById('statusBox');
+      let summaryText = `✅ মোট আছে: <b>${extractedData.length}</b> টি অর্ডার।`;
       if (duplicateCount > 0) {
         summaryText += ` (⚠️ ডুপ্লিকেট: <b>${duplicateCount}</b> টি)`;
       }
       statusBox.innerHTML = summaryText;
       renderTable();
-      input.value = ''; // ইনপুট রিসেট যাতে একই ফাইল চাইলে পুনরায় সিলেক্ট করা যায়
     }
 
     function renderTable() {
       const tableBody = document.getElementById('tableBody');
       tableBody.innerHTML = '';
+
+      let hasDuplicates = false;
+
       extractedData.forEach((row, i) => {
+        if (row.status === 'Duplicate') hasDuplicates = true;
         const tr = document.createElement('tr');
         const badgeClass = row.status === 'Duplicate' ? 'badge-duplicate' : 'badge-unique';
         const badgeText = row.status === 'Duplicate' ? 'ডুপ্লিকেট' : 'নতুন';
@@ -225,12 +276,18 @@
           <td><span style="color:#38bdf8; font-weight:bold;">${row.courier}</span></td>
           <td>${row.orderId}</td>
           <td style="color:${row.trackingId === 'নেই' ? '#f87171' : '#34d399'}; font-weight:bold;">${row.trackingId}</td>
+          <td style="text-align:center;">
+            <button class="btn-del-row" onclick="deleteSingleRow(${i})" title="শুধু এটি মুছুন">❌</button>
+          </td>
         `;
         tableBody.appendChild(tr);
       });
-      document.getElementById('resultsBox').style.display = 'block';
-      document.getElementById('exportBtn').style.display = 'block';
-      document.getElementById('clearBtn').style.display = 'block';
+
+      const show = extractedData.length > 0;
+      document.getElementById('resultsBox').style.display = show ? 'block' : 'none';
+      document.getElementById('exportBtn').style.display = show ? 'block' : 'none';
+      document.getElementById('clearBtn').style.display = show ? 'block' : 'none';
+      document.getElementById('removeDupBtn').style.display = (show && hasDuplicates) ? 'block' : 'none';
     }
 
     function exportToCSV() {
@@ -248,13 +305,12 @@
 
     function clearData() {
       extractedData = [];
-      seenOrderIds.clear();
-      duplicateCount = 0;
       document.getElementById('tableBody').innerHTML = '';
       document.getElementById('resultsBox').style.display = 'none';
       document.getElementById('exportBtn').style.display = 'none';
+      document.getElementById('removeDupBtn').style.display = 'none';
       document.getElementById('clearBtn').style.display = 'none';
-      document.getElementById('statusBox').innerHTML = 'সব তথ্য ক্লিয়ার করা হয়েছে। নতুন করে ফাইল দিন।';
+      document.getElementById('statusBox').innerHTML = 'সব তথ্য মুছে ফেলা হয়েছে।';
       document.getElementById('pdfInput').value = '';
     }
   </script>
