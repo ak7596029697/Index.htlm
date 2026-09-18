@@ -30,7 +30,7 @@
     .return-input-group input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; background: #1e293b; color: white; font-family: monospace; font-size: 13px; }
     .return-input-group button { padding: 8px 14px; border-radius: 6px; border: none; background: #f59e0b; color: #000; font-weight: bold; cursor: pointer; }
 
-    .status-bar { margin-top: 15px; font-size: 14px; text-align: center; font-weight: bold; color: #38bdf8; min-height: 20px; }
+    .status-bar { margin-top: 15px; font-size: 14px; text-align: center; font-weight: bold; color: #38bdf8; min-height: 24px; padding: 6px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); }
     .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
     button.action-btn { padding: 10px 14px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
     
@@ -148,12 +148,12 @@
       if (!trackingId || trackingId === "নেই") return null;
       const cleanAwb = encodeURIComponent(trackingId.trim());
 
-      if (courier.includes("Delhivery")) {
+      if (courier.includes("Shadowfax") || cleanAwb.startsWith("SF")) {
+        return `https://tracker.shadowfax.in/#/track/${cleanAwb}`;
+      } else if (courier.includes("Delhivery")) {
         return `https://www.delhivery.com/track/package/${cleanAwb}`;
       } else if (courier.includes("Xpressbees")) {
         return `https://www.xpressbees.com/shipment/tracking?awb=${cleanAwb}`;
-      } else if (courier.includes("Shadowfax")) {
-        return `https://tracker.shadowfax.in/#/track/${cleanAwb}`;
       } else if (courier.includes("Ekart")) {
         return `https://ekartlogistics.com/shipmenttrack/${cleanAwb}`;
       } else if (courier.includes("Amazon")) {
@@ -164,7 +164,6 @@
       return `https://www.google.com/search?q=${cleanAwb}+tracking`;
     }
 
-    // অ্যামাজনের ছবির উপরের "AWB XXXXXXXXXXXX" অংশটুকু নিখুঁতভাবে পড়ার ফাংশন
     async function extractAmazonAWBFromImage(page) {
       try {
         const viewport = page.getViewport({ scale: 2.0 });
@@ -196,15 +195,14 @@
     }
 
     function detectCourier(text, trackingId, platform) {
+      if (trackingId.toUpperCase().startsWith("SF") || /Shadowfax|dowfax|\bSF\b/i.test(text)) return "Shadowfax";
       if (platform === "Amazon" || /ATSPL|ATS|Amazon\s*Shipping/i.test(text)) return "Amazon Shipping (ATS)";
       if (/Delhivery/i.test(text)) return "Delhivery";
       if (/Xpressbees|Xpress\s*bees|\bXB\b/i.test(text)) return "Xpressbees";
-      if (/Shadowfax|\bSF\b/i.test(text)) return "Shadowfax";
       if (/Ekart|eKart/i.test(text)) return "Ekart";
       if (/Ecom\s*Express/i.test(text)) return "Ecom Express";
 
       if (trackingId.startsWith("1340") || (trackingId.startsWith("14") && trackingId.length >= 14)) return "Xpressbees";
-      if (trackingId.startsWith("SF") || trackingId.startsWith("sf")) return "Shadowfax";
       if (trackingId.startsWith("FMPC") || trackingId.startsWith("FMPP")) return "Ekart";
       if (/^(12|13|14|33|37)\d{10,12}$/.test(trackingId)) {
         return platform === "Amazon" ? "Amazon Shipping (ATS)" : "Delhivery";
@@ -216,21 +214,44 @@
     function findTrackingNumber(text, rawOrderId, platform) {
       const pureOrderId = rawOrderId.replace(/_\d+$/, '');
 
+      // ১. Shadowfax সরাসরি রিড (যেমন SF4006123782FPL বা মাঝে স্পেস থাকলেও)
+      const sfDirect = text.match(/\bSF\s*([0-9]{8,14}\s*[A-Z]{0,5})\b/i);
+      if (sfDirect && sfDirect[1]) {
+        return ("SF" + sfDirect[1].replace(/\s+/g, '')).toUpperCase();
+      }
+
+      // স্পেস জোড়া দেওয়া ভার্সন
+      const cleanedSpacedText = text.replace(/([A-Za-z0-9])\s+([A-Za-z0-9])/g, '$1$2').replace(/([A-Za-z0-9])\s+([A-Za-z0-9])/g, '$1$2');
+
+      const sfCleaned = cleanedSpacedText.match(/\b(SF[0-9]{8,14}[A-Z]{0,5})\b/i);
+      if (sfCleaned && sfCleaned[1]) {
+        return sfCleaned[1].toUpperCase();
+      }
+
+      // ২. Amazon AWB সরাসরি রিড
       const amzAwbDirect = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
       if (amzAwbDirect && amzAwbDirect[1]) return amzAwbDirect[1].trim();
 
-      const cleanedSpacedText = text.replace(/(\d)\s+(\d)\s+(\d)\s+(\d)/g, '$1$2$3$4');
-
-      const prefixMatch = cleanedSpacedText.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{10,22})/i);
+      // ৩. সাধারণ ট্যাগ
+      const prefixMatch = cleanedSpacedText.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{8,22})/i);
       if (prefixMatch && prefixMatch[1] && !prefixMatch[1].includes(pureOrderId)) return prefixMatch[1].trim();
 
-      const specialMatch = cleanedSpacedText.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+|SF\d{9,16}|IN\d{8,14}|TBA\d{9,15})\b/i);
+      // ৪. স্পেশাল প্রিফিক্স কোড (FMPC, FMPP, SF, IN, TBA)
+      const specialMatch = cleanedSpacedText.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+|SF[A-Z0-9]{8,16}|IN\d{8,14}|TBA\d{9,15})\b/i);
       if (specialMatch && specialMatch[0]) return specialMatch[0].trim();
 
+      // ৫. ১২ থেকে ১৬ ডিজিটের নম্বর
       const allNumbers = cleanedSpacedText.match(/\b\d{12,16}\b/g) || [];
       for (let num of allNumbers) {
         let clean = num.trim();
         if (clean !== pureOrderId && !clean.startsWith("2026") && !clean.startsWith("2025") && !clean.startsWith("19")) return clean;
+      }
+
+      // ৬. ১০ থেকে ১১ ডিজিটের নম্বর
+      const tenDigitNumbers = cleanedSpacedText.match(/\b\d{10,11}\b/g) || [];
+      for (let num of tenDigitNumbers) {
+        let clean = num.trim();
+        if (clean !== pureOrderId && !clean.startsWith("91") && !clean.startsWith("202")) return clean;
       }
 
       return "নেই";
@@ -257,7 +278,10 @@
       const statusBox = document.getElementById('statusBox');
       statusBox.innerHTML = `💾 <b>সফলভাবে ব্রাউজার মেমরিতে সেভ হয়েছে!</b> (মোট সংরক্ষিত: ${extractedData.length} টি)`;
       statusBox.style.color = '#10b981';
-      setTimeout(() => { statusBox.style.color = '#38bdf8'; }, 3000);
+      setTimeout(() => { 
+        statusBox.style.color = '#38bdf8'; 
+        updateUI(refreshDuplicateStatus());
+      }, 2500);
     }
 
     async function processMultiplePDFs(input) {
@@ -266,6 +290,8 @@
 
       const statusBox = document.getElementById('statusBox');
       statusBox.innerHTML = `⏳ মোট ${files.length} টি ফাইল প্রসেস করা হচ্ছে...`;
+
+      let beforeCount = extractedData.length;
 
       for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
         const file = files[fileIndex];
@@ -285,7 +311,6 @@
             const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
             const pageText = items.join(' ');
 
-            // ইমেজ লেবেল পেজ হলে সরাসরি OCR দিয়ে AWB বের করা
             if (items.length === 0 || pageText.includes("AWB") || pageText.length < 50) {
               let awb = await extractAmazonAWBFromImage(page);
               if (awb) pendingAmazonAWB = awb;
@@ -332,10 +357,10 @@
         }
       }
 
+      let addedCount = extractedData.length - beforeCount;
       const duplicateCount = refreshDuplicateStatus();
-      updateUI(duplicateCount);
+      updateUI(duplicateCount, addedCount);
       input.value = '';
-      statusBox.innerHTML = `✅ নতুন ফাইল লোড হয়েছে! তালিকায় রাখতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
     }
 
     function handleManualReturn() {
@@ -368,7 +393,7 @@
           cName = "Ekart";
         } else if (meeshoOrderRegex.test(searchKey)) {
           pForm = "Meesho";
-          cName = "Delhivery / Xpressbees";
+          cName = "Shadowfax / Delhivery";
         }
 
         extractedData.unshift({
@@ -382,7 +407,7 @@
       }
 
       updateUI(refreshDuplicateStatus());
-      document.getElementById('statusBox').innerHTML = `⚠️ <b>${searchKey}</b> রিটার্ন চিহ্নিত হয়েছে! সংরক্ষণ করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
+      document.getElementById('statusBox').innerHTML = `⚠️ <b>${searchKey}</b> রিটার্ন চিহ্নিত হয়েছে! সেভ রাখতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
     }
 
     async function processReturnPDFs(input) {
@@ -437,12 +462,21 @@
       document.getElementById('statusBox').innerHTML = `🗑️ একটি সারি মুছে ফেলা হয়েছে। স্থায়ী করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
     }
 
-    function updateUI(duplicateCount) {
+    function updateUI(duplicateCount, newlyAddedCount = 0) {
       const statusBox = document.getElementById('statusBox');
       let returnCount = extractedData.filter(d => d.status === "Returned").length;
-      let summaryText = `📋 মোট অর্ডারের সংখ্যা: <b>${extractedData.length}</b> টি।`;
-      if (returnCount > 0) summaryText += ` (⚠️ রিটার্ন: <b style="color:#f59e0b;">${returnCount}</b> টি)`;
-      if (duplicateCount > 0) summaryText += ` (⚠️ ডুপ্লিকেট: <b>${duplicateCount}</b> টি)`;
+      
+      let summaryText = `✅ মোট আছে: <b>${extractedData.length}</b> টি অর্ডার।`;
+      if (newlyAddedCount > 0) {
+        summaryText += ` (📥 নতুন যোগ হয়েছে: <b style="color:#34d399;">${newlyAddedCount}</b> টি)`;
+      }
+      if (duplicateCount > 0) {
+        summaryText += ` (⚠️ ডুপ্লিকেট: <b style="color:#f87171;">${duplicateCount}</b> টি)`;
+      }
+      if (returnCount > 0) {
+        summaryText += ` (🔄 রিটার্ন: <b style="color:#f59e0b;">${returnCount}</b> টি)`;
+      }
+
       statusBox.innerHTML = summaryText;
       renderTable();
     }
@@ -531,7 +565,6 @@
     window.onload = function() {
       if (extractedData.length > 0) {
         updateUI(refreshDuplicateStatus());
-        document.getElementById('statusBox').innerHTML = `📦 পূর্বে সংরক্ষিত <b>${extractedData.length}</b> টি অর্ডার মেমরি থেকে লোড হয়েছে।`;
       }
     };
   </script>
