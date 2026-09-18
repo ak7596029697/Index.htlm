@@ -4,9 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bulk Shipping & Return Order Manager</title>
-  <!-- PDF.js & Tesseract OCR Library -->
+  <!-- শুধু হালকা ও দ্রুতগতির PDF.js লাইব্রেরি -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
@@ -59,7 +58,7 @@
 
   <div class="container">
     <h1>📄 Dispatch & Return Order Manager</h1>
-    <p class="subtitle">Amazon, Flipkart ও Meesho শিপিং লেবেল ও সরাসরি লাইভ ট্র্যাকিং</p>
+    <p class="subtitle">Amazon, Flipkart ও Meesho শিপিং লেবেল ও রিটার্ন ট্র্যাকার</p>
 
     <div class="grid-sections">
       <div class="card card-dispatch">
@@ -83,7 +82,7 @@
         <label class="upload-box" for="returnPdfInput" style="border-color: #f59e0b; background: rgba(245, 158, 11, 0.04);">
           <div style="font-size: 24px;">📥</div>
           <div style="font-size: 13px; font-weight: bold; margin-top: 4px;">রিটার্ন স্লিপের PDF দিন</div>
-          <div style="font-size: 11px; color: #f59e0b;">(Amazon বা অন্য প্ল্যাটফর্মের রিটার্ন ফাইল)</div>
+          <div style="font-size: 11px; color: #f59e0b;">(রিটার্ন স্লিপের PDF ফাইল)</div>
           <input type="file" id="returnPdfInput" accept="application/pdf" multiple onchange="processReturnPDFs(this)">
         </label>
         <div class="return-input-group">
@@ -111,7 +110,7 @@
             <th>প্ল্যাটফর্ম</th>
             <th>কুরিয়ার পার্টনার</th>
             <th>অর্ডার আইডি</th>
-            <th>ট্র্যাকিং আইডি (ক্লিক করে ট্র্যাক করুন)</th>
+            <th>ট্র্যাকিং আইডি (AWB)</th>
             <th style="text-align:center;">অ্যাকশন</th>
           </tr>
         </thead>
@@ -120,27 +119,22 @@
     </div>
   </div>
 
-  <canvas id="hiddenCanvas" style="display:none;"></canvas>
-  <canvas id="cropCanvas" style="display:none;"></canvas>
-
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
     let extractedData = [];
-    let ocrWorker = null;
-
-    async function initOCR() {
-      if (!ocrWorker) {
-        ocrWorker = await Tesseract.createWorker('eng');
-      }
-      return ocrWorker;
-    }
 
     const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
     const meeshoOrderRegex   = /\b\d{16,20}_\d+\b/;
 
-    // সরাসরি ট্র্যাকিং ওয়েবসাইটের লিঙ্ক তৈরি
+    function extractDate(text) {
+      const dMatch = text.match(/\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4})\b/);
+      if (dMatch) return dMatch[1];
+      return new Date().toISOString().slice(0,10);
+    }
+
+    // ট্র্যাকিং সাইটের লাইভ লিংক তৈরি
     function getTrackingUrl(courier, trackingId) {
       if (!trackingId || trackingId === "নেই") return null;
       const cleanAwb = encodeURIComponent(trackingId.trim());
@@ -159,42 +153,6 @@
         return `https://ecomexpress.in/tracking/?awb_number=${cleanAwb}`;
       }
       return `https://www.google.com/search?q=${cleanAwb}+tracking`;
-    }
-
-    function extractDate(text) {
-      const dMatch = text.match(/\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4})\b/);
-      if (dMatch) return dMatch[1];
-      return new Date().toISOString().slice(0,10);
-    }
-
-    async function extractAmazonAWBFromImage(page) {
-      try {
-        const viewport = page.getViewport({ scale: 2.0 });
-        const canvas = document.getElementById('hiddenCanvas');
-        const ctx = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-
-        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-
-        const cropCanvas = document.getElementById('cropCanvas');
-        cropCanvas.width = canvas.width * 0.55;
-        cropCanvas.height = canvas.height * 0.22;
-        const cropCtx = cropCanvas.getContext('2d');
-        cropCtx.drawImage(canvas, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
-
-        const worker = await initOCR();
-        const ret = await worker.recognize(cropCanvas);
-        const ocrText = ret.data.text;
-
-        const match = ocrText.match(/AWB\s*([0-9]{10,14})/i) || ocrText.match(/\b(37[0-9]{10})\b/);
-        if (match && match[1]) {
-          return match[1].trim();
-        }
-      } catch (err) {
-        console.error("OCR Error:", err);
-      }
-      return null;
     }
 
     function detectCourier(text, trackingId, platform) {
@@ -218,6 +176,7 @@
     function findTrackingNumber(text, rawOrderId, platform) {
       const pureOrderId = rawOrderId.replace(/_\d+$/, '');
 
+      // Amazon-এর AWB নম্বর সরাসরি পড়া
       const amzAwbDirect = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
       if (amzAwbDirect && amzAwbDirect[1]) return amzAwbDirect[1].trim();
 
@@ -233,6 +192,12 @@
       for (let num of allNumbers) {
         let clean = num.trim();
         if (clean !== pureOrderId && !clean.startsWith("2026") && !clean.startsWith("2025") && !clean.startsWith("19")) return clean;
+      }
+
+      const tenDigitNumbers = cleanedSpacedText.match(/\b\d{10,11}\b/g) || [];
+      for (let num of tenDigitNumbers) {
+        let clean = num.trim();
+        if (clean !== pureOrderId && !clean.startsWith("91") && !clean.startsWith("202")) return clean;
       }
 
       return "নেই";
@@ -270,19 +235,12 @@
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           const totalPages = pdf.numPages;
 
-          let pendingAmazonAWB = "";
-
           for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-            statusBox.innerHTML = `⏳ প্রসেস হচ্ছে: পাতা ${pageNum} / ${totalPages}`;
+            statusBox.innerHTML = `⏳ পাতা প্রসেস হচ্ছে: ${pageNum} / ${totalPages}`;
             const page = await pdf.getPage(pageNum);
             const textContent = await page.getTextContent();
             const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
             const pageText = items.join(' ');
-
-            if (items.length === 0 || pageText.includes("AWB") || pageText.length < 50) {
-              let awb = await extractAmazonAWBFromImage(page);
-              if (awb) pendingAmazonAWB = awb;
-            }
 
             let platform = "অন্যান্য";
             let orderId = "";
@@ -300,11 +258,6 @@
 
             if (orderId) {
               let trackingId = findTrackingNumber(pageText, orderId, platform);
-              
-              if ((trackingId === "নেই" || platform === "Amazon") && pendingAmazonAWB) {
-                trackingId = pendingAmazonAWB;
-              }
-
               let courier = detectCourier(pageText, trackingId, platform);
               let orderDate = extractDate(pageText);
 
@@ -316,8 +269,6 @@
                 trackingId: trackingId,
                 status: "Unique"
               });
-
-              pendingAmazonAWB = "";
             }
           }
         } catch (err) {
@@ -334,11 +285,11 @@
       const input = document.getElementById('manualReturnId');
       const val = input.value.trim();
       if (!val) return;
-      markAsReturned(val, "অন্যান্য");
+      markAsReturned(val);
       input.value = '';
     }
 
-    function markAsReturned(searchKey, detectedPlatform) {
+    function markAsReturned(searchKey) {
       let found = false;
       extractedData.forEach(item => {
         if (item.orderId.toLowerCase() === searchKey.toLowerCase() || 
@@ -349,16 +300,16 @@
       });
 
       if (!found) {
-        let pForm = detectedPlatform || "অন্যান্য";
+        let pForm = "অন্যান্য";
         let cName = "অন্যান্য";
 
-        if (amazonOrderRegex.test(searchKey) || pForm === "Amazon") {
+        if (amazonOrderRegex.test(searchKey)) {
           pForm = "Amazon";
           cName = "Amazon Shipping (ATS)";
-        } else if (flipkartOrderRegex.test(searchKey) || pForm === "Flipkart") {
+        } else if (flipkartOrderRegex.test(searchKey)) {
           pForm = "Flipkart";
           cName = "Ekart";
-        } else if (meeshoOrderRegex.test(searchKey) || pForm === "Meesho") {
+        } else if (meeshoOrderRegex.test(searchKey)) {
           pForm = "Meesho";
           cName = "Delhivery / Xpressbees";
         }
@@ -390,30 +341,17 @@
             const textContent = await page.getTextContent();
             const pageText = textContent.items.map(item => item.str.trim()).join(' ');
 
-            let pForm = "অন্যান্য";
             let orderId = "";
-            if (amazonOrderRegex.test(pageText)) {
-              pForm = "Amazon";
-              orderId = pageText.match(amazonOrderRegex)[0];
-            } else if (flipkartOrderRegex.test(pageText)) {
-              pForm = "Flipkart";
-              orderId = pageText.match(flipkartOrderRegex)[0];
-            } else if (meeshoOrderRegex.test(pageText)) {
-              pForm = "Meesho";
-              orderId = pageText.match(meeshoOrderRegex)[0];
-            }
+            if (flipkartOrderRegex.test(pageText)) orderId = pageText.match(flipkartOrderRegex)[0];
+            else if (amazonOrderRegex.test(pageText)) orderId = pageText.match(amazonOrderRegex)[0];
+            else if (meeshoOrderRegex.test(pageText)) orderId = pageText.match(meeshoOrderRegex)[0];
 
-            let trackingId = await extractAmazonAWBFromImage(page) || findTrackingNumber(pageText, orderId || "0", pForm);
+            let trackingId = findTrackingNumber(pageText, orderId || "0", "অন্যান্য");
 
-            if (orderId) {
-              markAsReturned(orderId, pForm);
-            } else if (trackingId !== "নেই") {
-              markAsReturned(trackingId, pForm);
-            }
+            if (orderId) markAsReturned(orderId);
+            else if (trackingId !== "নেই") markAsReturned(trackingId);
           }
-        } catch (e) {
-          console.error(e);
-        }
+        } catch (e) {}
       }
       input.value = '';
     }
@@ -440,7 +378,7 @@
           }
         }
         updateUI(refreshDuplicateStatus());
-        document.getElementById('statusBox').innerHTML = `📥 পূর্বের CSV সফলভাবে লোড হয়েছে!`;
+        document.getElementById('statusBox').innerHTML = `📥 পূর্বের CSV সফলভাবে যোগ হয়েছে!`;
       };
       reader.readAsText(file);
       input.value = '';
@@ -457,4 +395,96 @@
 
     function deleteSingleRow(index) {
       extractedData.splice(index, 1);
-      const dupCount = refreshDup
+      const dupCount = refreshDuplicateStatus();
+      updateUI(dupCount);
+    }
+
+    function updateUI(duplicateCount) {
+      const statusBox = document.getElementById('statusBox');
+      let returnCount = extractedData.filter(d => d.status === "Returned").length;
+      let summaryText = `✅ মোট আছে: <b>${extractedData.length}</b> টি অর্ডার।`;
+      if (returnCount > 0) summaryText += ` (⚠️ রিটার্ন: <b style="color:#f59e0b;">${returnCount}</b> টি)`;
+      if (duplicateCount > 0) summaryText += ` (⚠️ ডুপ্লিকেট: <b>${duplicateCount}</b> টি)`;
+      statusBox.innerHTML = summaryText;
+      renderTable();
+    }
+
+    function renderTable() {
+      const tableBody = document.getElementById('tableBody');
+      tableBody.innerHTML = '';
+      let hasDuplicates = false;
+
+      extractedData.forEach((row, i) => {
+        if (row.status === 'Duplicate') hasDuplicates = true;
+        const tr = document.createElement('tr');
+        
+        let badgeClass = 'badge-unique';
+        let badgeText = 'ডেলিভারি/প্রসেসিং';
+
+        if (row.status === 'Duplicate') {
+          badgeClass = 'badge-duplicate';
+          badgeText = 'ডুপ্লিকেট';
+        } else if (row.status === 'Returned') {
+          badgeClass = 'badge-returned';
+          badgeText = '⚠️ রিটার্ন এসেছে';
+          tr.className = 'row-returned';
+        }
+
+        let trackUrl = getTrackingUrl(row.courier, row.trackingId);
+        let trackingDisplay = row.trackingId;
+
+        if (trackUrl && row.trackingId !== "নেই") {
+          trackingDisplay = `<a class="track-link" href="${trackUrl}" target="_blank" title="ক্লিক করে লাইভ স্ট্যাটাস দেখুন">${row.trackingId} 🔗</a>`;
+        } else if (row.trackingId === "নেই") {
+          trackingDisplay = `<span style="color:#f87171; font-weight:bold;">নেই</span>`;
+        }
+
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td><span class="${badgeClass}">${badgeText}</span></td>
+          <td style="color:#94a3b8;">${row.date}</td>
+          <td><b>${row.platform}</b></td>
+          <td><span style="color:#38bdf8; font-weight:bold;">${row.courier}</span></td>
+          <td>${row.orderId}</td>
+          <td>${trackingDisplay}</td>
+          <td style="text-align:center;">
+            <button class="btn-del-row" onclick="deleteSingleRow(${i})" title="মুছুন">❌</button>
+          </td>
+        `;
+        tableBody.appendChild(tr);
+      });
+
+      const show = extractedData.length > 0;
+      document.getElementById('resultsBox').style.display = show ? 'block' : 'none';
+      document.getElementById('exportBtn').style.display = show ? 'block' : 'none';
+      document.getElementById('clearBtn').style.display = show ? 'block' : 'none';
+      document.getElementById('removeDupBtn').style.display = (show && hasDuplicates) ? 'block' : 'none';
+    }
+
+    // এক্সেলে যাতে নম্বর না কাটে (Scientific notation না হয়)
+    function exportToCSV() {
+      if (!extractedData.length) return;
+      let csv = "Serial,Status,Date,Platform,Courier Partner,Order ID,Tracking ID\n";
+      extractedData.forEach((r, i) => {
+        csv += `${i + 1},"${r.status}","\t${r.date}","${r.platform}","${r.courier}","\t${r.orderId}","\t${r.trackingId}"\n`;
+      });
+      const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `Orders_Report_${new Date().toISOString().slice(0,10)}.csv`;
+      link.click();
+    }
+
+    function clearData() {
+      extractedData = [];
+      document.getElementById('tableBody').innerHTML = '';
+      document.getElementById('resultsBox').style.display = 'none';
+      document.getElementById('exportBtn').style.display = 'none';
+      document.getElementById('removeDupBtn').style.display = 'none';
+      document.getElementById('clearBtn').style.display = 'none';
+      document.getElementById('statusBox').innerHTML = 'সব তথ্য মুছে ফেলা হয়েছে।';
+      document.getElementById('pdfInput').value = '';
+    }
+  </script>
+</body>
+</html>
