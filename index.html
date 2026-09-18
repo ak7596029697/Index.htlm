@@ -4,8 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bulk Shipping & Return Order Manager</title>
-  <!-- PDF.js Library -->
+  <!-- PDF.js & Tesseract OCR Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
@@ -61,7 +62,7 @@
 
   <div class="container">
     <h1>📄 Dispatch & Return Order Manager</h1>
-    <p class="subtitle">শিপিং লেবেল থেকে অর্ডার সংগ্রহ ও মেমরিতে সংরক্ষণ সিস্টেম</p>
+    <p class="subtitle">Amazon, Flipkart ও Meesho শিপিং লেবেল ও মেমরি সেভ সিস্টেম</p>
 
     <div class="grid-sections">
       <div class="card card-dispatch">
@@ -117,11 +118,21 @@
     </div>
   </div>
 
+  <canvas id="hiddenCanvas" style="display:none;"></canvas>
+  <canvas id="cropCanvas" style="display:none;"></canvas>
+
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-    // ব্রাউজারের মেমোরি থেকে পূর্বে সংরক্ষিত তথ্য লোড করা
     let extractedData = JSON.parse(localStorage.getItem('my_orders_db') || '[]');
+    let ocrWorker = null;
+
+    async function initOCR() {
+      if (!ocrWorker) {
+        ocrWorker = await Tesseract.createWorker('eng');
+      }
+      return ocrWorker;
+    }
 
     const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
@@ -151,6 +162,37 @@
         return `https://ecomexpress.in/tracking/?awb_number=${cleanAwb}`;
       }
       return `https://www.google.com/search?q=${cleanAwb}+tracking`;
+    }
+
+    // অ্যামাজনের ছবির উপরের "AWB XXXXXXXXXXXX" অংশটুকু নিখুঁতভাবে পড়ার ফাংশন
+    async function extractAmazonAWBFromImage(page) {
+      try {
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.getElementById('hiddenCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+        const cropCanvas = document.getElementById('cropCanvas');
+        cropCanvas.width = canvas.width * 0.55;
+        cropCanvas.height = canvas.height * 0.22;
+        const cropCtx = cropCanvas.getContext('2d');
+        cropCtx.drawImage(canvas, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
+
+        const worker = await initOCR();
+        const ret = await worker.recognize(cropCanvas);
+        const ocrText = ret.data.text;
+
+        const match = ocrText.match(/AWB\s*([0-9]{10,14})/i) || ocrText.match(/\b(37[0-9]{10})\b/);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
+      } catch (err) {
+        console.error("OCR Error:", err);
+      }
+      return null;
     }
 
     function detectCourier(text, trackingId, platform) {
@@ -191,12 +233,6 @@
         if (clean !== pureOrderId && !clean.startsWith("2026") && !clean.startsWith("2025") && !clean.startsWith("19")) return clean;
       }
 
-      const tenDigitNumbers = cleanedSpacedText.match(/\b\d{10,11}\b/g) || [];
-      for (let num of tenDigitNumbers) {
-        let clean = num.trim();
-        if (clean !== pureOrderId && !clean.startsWith("91") && !clean.startsWith("202")) return clean;
-      }
-
       return "নেই";
     }
 
@@ -216,7 +252,6 @@
       return dupCount;
     }
 
-    // আপনার পছন্দের "মেমরিতে সেভ করুন" ফাংশন
     function manualSaveToMemory() {
       localStorage.setItem('my_orders_db', JSON.stringify(extractedData));
       const statusBox = document.getElementById('statusBox');
@@ -241,12 +276,20 @@
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           const totalPages = pdf.numPages;
 
+          let pendingAmazonAWB = "";
+
           for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-            statusBox.innerHTML = `⏳ পাতা প্রসেস হচ্ছে: ${pageNum} / ${totalPages}`;
+            statusBox.innerHTML = `⏳ প্রসেস হচ্ছে: পাতা ${pageNum} / ${totalPages}`;
             const page = await pdf.getPage(pageNum);
             const textContent = await page.getTextContent();
             const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
             const pageText = items.join(' ');
+
+            // ইমেজ লেবেল পেজ হলে সরাসরি OCR দিয়ে AWB বের করা
+            if (items.length === 0 || pageText.includes("AWB") || pageText.length < 50) {
+              let awb = await extractAmazonAWBFromImage(page);
+              if (awb) pendingAmazonAWB = awb;
+            }
 
             let platform = "অন্যান্য";
             let orderId = "";
@@ -264,6 +307,11 @@
 
             if (orderId) {
               let trackingId = findTrackingNumber(pageText, orderId, platform);
+              
+              if ((trackingId === "নেই" || platform === "Amazon") && pendingAmazonAWB) {
+                trackingId = pendingAmazonAWB;
+              }
+
               let courier = detectCourier(pageText, trackingId, platform);
               let orderDate = extractDate(pageText);
 
@@ -275,6 +323,8 @@
                 trackingId: trackingId,
                 status: "Unique"
               });
+
+              pendingAmazonAWB = "";
             }
           }
         } catch (err) {
@@ -285,7 +335,7 @@
       const duplicateCount = refreshDuplicateStatus();
       updateUI(duplicateCount);
       input.value = '';
-      statusBox.innerHTML = `✅ নতুন ফাইল লোড হয়েছে! সংরক্ষণ করতে নীল <b>"💾 মেমরিতে সেভ করুন"</b> বাটনে চাপ দিন।`;
+      statusBox.innerHTML = `✅ নতুন ফাইল লোড হয়েছে! তালিকায় রাখতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
     }
 
     function handleManualReturn() {
@@ -348,12 +398,20 @@
             const textContent = await page.getTextContent();
             const pageText = textContent.items.map(item => item.str.trim()).join(' ');
 
+            let pForm = "অন্যান্য";
             let orderId = "";
-            if (flipkartOrderRegex.test(pageText)) orderId = pageText.match(flipkartOrderRegex)[0];
-            else if (amazonOrderRegex.test(pageText)) orderId = pageText.match(amazonOrderRegex)[0];
-            else if (meeshoOrderRegex.test(pageText)) orderId = pageText.match(meeshoOrderRegex)[0];
+            if (amazonOrderRegex.test(pageText)) {
+              pForm = "Amazon";
+              orderId = pageText.match(amazonOrderRegex)[0];
+            } else if (flipkartOrderRegex.test(pageText)) {
+              pForm = "Flipkart";
+              orderId = pageText.match(flipkartOrderRegex)[0];
+            } else if (meeshoOrderRegex.test(pageText)) {
+              pForm = "Meesho";
+              orderId = pageText.match(meeshoOrderRegex)[0];
+            }
 
-            let trackingId = findTrackingNumber(pageText, orderId || "0", "অন্যান্য");
+            let trackingId = await extractAmazonAWBFromImage(page) || findTrackingNumber(pageText, orderId || "0", pForm);
 
             if (orderId) markAsReturned(orderId);
             else if (trackingId !== "নেই") markAsReturned(trackingId);
@@ -369,7 +427,7 @@
       const removedCount = initialCount - extractedData.length;
       refreshDuplicateStatus();
       updateUI(0);
-      document.getElementById('statusBox').innerHTML = `🧹 <b>${removedCount}</b> টি ডুপ্লিকেট মুছে ফেলা হয়েছে! সেভ রাখতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
+      document.getElementById('statusBox').innerHTML = `🧹 <b>${removedCount}</b> টি ডুপ্লিকেট মুছে ফেলা হয়েছে! সেভ করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
     }
 
     function deleteSingleRow(index) {
@@ -470,7 +528,6 @@
       }
     }
 
-    // পূর্বে সেভ করা থাকলে পেজ খুলতেই লোড হবে
     window.onload = function() {
       if (extractedData.length > 0) {
         updateUI(refreshDuplicateStatus());
