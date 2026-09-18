@@ -2,223 +2,195 @@
 <html lang="bn">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Fast Order Scanner</title>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shipping Label PDF to Excel Extractor</title>
+  <!-- PDF.js Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-    body { background: #0b0f19; color: #f8fafc; padding: 12px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-    .header { text-align: center; margin-bottom: 8px; width: 100%; max-width: 450px; }
-    .header h1 { font-size: 18px; color: #38bdf8; }
-    .camera-box { position: relative; width: 100%; max-width: 450px; height: 260px; border-radius: 12px; overflow: hidden; background: #000; border: 2px solid #334155; }
-    video { width: 100%; height: 100%; object-fit: cover; }
-    .aim-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; height: 80px; border: 2px dashed #38bdf8; border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.55); pointer-events: none; }
-    .controls { width: 100%; max-width: 450px; display: flex; gap: 8px; margin-top: 10px; }
-    button { flex: 1; padding: 12px; font-size: 15px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
-    .btn-snap { background: #2563eb; color: white; }
-    .btn-export { background: #10b981; color: white; }
-    .btn-clear { background: #ef4444; color: white; flex: 0 0 45px; }
-    .status { width: 100%; max-width: 450px; background: #1e293b; padding: 10px; border-radius: 8px; margin-top: 10px; font-size: 13px; text-align: center; border-left: 4px solid #38bdf8; }
-    .list-box { width: 100%; max-width: 450px; margin-top: 12px; flex-grow: 1; }
-    ul { list-style: none; max-height: 220px; overflow-y: auto; background: #1e293b; border-radius: 8px; }
-    li { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #334155; font-family: monospace; font-size: 12px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background: #0f172a; color: #f8fafc; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+    .container { width: 100%; max-width: 650px; background: #1e293b; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    h1 { font-size: 20px; color: #38bdf8; text-align: center; margin-bottom: 6px; }
+    p.subtitle { font-size: 13px; color: #94a3b8; text-align: center; margin-bottom: 20px; }
+    .upload-box { border: 2px dashed #38bdf8; border-radius: 8px; padding: 30px 15px; text-align: center; cursor: pointer; background: rgba(56, 189, 248, 0.05); }
+    .upload-box:hover { background: rgba(56, 189, 248, 0.1); }
+    input[type="file"] { display: none; }
+    .upload-icon { font-size: 40px; margin-bottom: 10px; }
+    .status-bar { margin-top: 15px; font-size: 14px; text-align: center; font-weight: bold; color: #38bdf8; min-height: 20px; }
+    .controls { display: flex; gap: 10px; margin-top: 20px; }
+    button { flex: 1; padding: 12px; font-size: 14px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
+    .btn-export { background: #10b981; color: white; display: none; }
+    .btn-clear { background: #ef4444; color: white; display: none; flex: 0 0 60px; }
+    .results { margin-top: 20px; max-height: 300px; overflow-y: auto; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+    th, td { padding: 10px; border-bottom: 1px solid #334155; }
+    th { background: #1e293b; color: #94a3b8; position: sticky; top: 0; }
+    td { font-family: monospace; }
   </style>
 </head>
 <body>
 
-  <div class="header">
-    <h1>📦 Smart Order Scanner</h1>
-    <p style="font-size:11px; color:#94a3b8;">লেখা বা বারকোড বক্সে এনে "স্ক্যান চাপুন"</p>
-  </div>
+  <div class="container">
+    <h1>📄 Label PDF to Excel Extractor</h1>
+    <p class="subtitle">Flipkart, Amazon ও Meesho শিপিং লেবেল PDF থেকে এক্সেল ফাইল</p>
 
-  <div class="camera-box">
-    <video id="video" autoplay playsinline muted></video>
-    <div class="aim-box"></div>
-    <canvas id="canvas" style="display:none;"></canvas>
-  </div>
+    <label class="upload-box" for="pdfInput">
+      <div class="upload-icon">📑</div>
+      <div style="font-size: 15px; font-weight: bold;">শিপিং লেবেল PDF ফাইলটি বেছে নিন</div>
+      <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">(১০০+ পেজ হলেও সেকেন্ডেই কাজ করবে)</div>
+      <input type="file" id="pdfInput" accept="application/pdf" onchange="processPDF(this)">
+    </label>
 
-  <div class="controls">
-    <button class="btn-snap" id="snapBtn" onclick="processFrame()">📸 স্ক্যান করুন</button>
-    <button class="btn-export" onclick="exportExcel()">📥 Excel</button>
-    <button class="btn-clear" onclick="clearData()">🗑️</button>
-  </div>
+    <div class="status-bar" id="statusBox"></div>
 
-  <div class="status" id="statusBox">ক্যামেরা চালু হচ্ছে...</div>
+    <div class="controls">
+      <button class="btn-export" id="exportBtn" onclick="exportToCSV()">📥 Excel (CSV) ডাউনলোড</button>
+      <button class="btn-clear" id="clearBtn" onclick="clearData()">🗑️</button>
+    </div>
 
-  <div class="list-box">
-    <h4 style="font-size:13px; margin-bottom:6px;">তালিকা (<span id="count">0</span>):</h4>
-    <ul id="itemsList"></ul>
+    <div class="results" id="resultsBox" style="display:none;">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>প্ল্যাটফর্ম</th>
+            <th>অর্ডার আইডি</th>
+            <th>ট্র্যাকিং আইডি (AWB)</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
   </div>
 
   <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const statusBox = document.getElementById('statusBox');
-    const itemsList = document.getElementById('itemsList');
-    const countBadge = document.getElementById('count');
-    const snapBtn = document.getElementById('snapBtn');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-    let scannedData = JSON.parse(localStorage.getItem('saved_orders') || '[]');
-    let worker = null;
-    let codeReader = null;
+    let extractedData = [];
 
-    const patterns = [
-      { name: "Flipkart", regex: /OD\d{16,20}/i },
-      { name: "Amazon",   regex: /\d{3}-\d{7}-\d{7}/ },
-      { name: "Meesho",   regex: /\d{16,20}_\d+/ }
+    // ফরম্যাট প্যাটার্ন
+    const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
+    const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
+    const meeshoOrderRegex   = /\b\d{16,20}_\d+\b/;
+
+    // সাধারণ ট্র্যাকিং আইডি প্যাটার্ন
+    const trackingPatterns = [
+      /\bFMPC\w+\b/i,
+      /\bFMPP\w+\b/i,
+      /\bSF\d{9,}\b/i,
+      /\b\d{12,14}\b/,
+      /\bDELHIVERY\w*\b/i,
+      /\bECOM\w*\b/i
     ];
 
-    function updateUI() {
-      itemsList.innerHTML = '';
-      scannedData.slice().reverse().forEach((item, index) => {
-        const li = document.createElement('li');
-        li.innerHTML = `<span><b>#${scannedData.length - index}</b> [${item.platform}] ${item.id}</span> <span>${item.time}</span>`;
-        itemsList.appendChild(li);
-      });
-      countBadge.innerText = scannedData.length;
-      localStorage.setItem('saved_orders', JSON.stringify(scannedData));
-    }
+    async function processPDF(input) {
+      const file = input.files[0];
+      if (!file) return;
 
-    function addOrderId(rawId, platform) {
-      let id = rawId.trim().toUpperCase();
-      if (!scannedData.some(d => d.id === id)) {
-        let now = new Date();
-        scannedData.push({
-          id: id,
-          platform: platform,
-          time: now.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
-          date: now.toISOString().slice(0, 10)
-        });
-        if (navigator.vibrate) navigator.vibrate(120);
-        updateUI();
-        statusBox.style.borderLeftColor = "#10b981";
-        statusBox.innerHTML = `✅ [${platform}] সেভ হয়েছে: <b>${id}</b>`;
-      } else {
-        statusBox.style.borderLeftColor = "#f59e0b";
-        statusBox.innerHTML = `⚠️ আগেই নেওয়া হয়েছে: <b>${id}</b>`;
-      }
-    }
+      extractedData = [];
+      const statusBox = document.getElementById('statusBox');
+      const exportBtn = document.getElementById('exportBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const resultsBox = document.getElementById('resultsBox');
+      const tableBody = document.getElementById('tableBody');
 
-    async function initCamera() {
-      updateUI();
+      tableBody.innerHTML = '';
+      resultsBox.style.display = 'none';
+      exportBtn.style.display = 'none';
+      clearBtn.style.display = 'none';
+      statusBox.innerHTML = "⏳ PDF পড়া শুরু হচ্ছে...";
+
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "environment",
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const totalPages = pdf.numPages;
+
+        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+          statusBox.innerHTML = `⏳ পেজ প্রসেস হচ্ছে: ${pageNum} / ${totalPages}`;
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(' ');
+
+          let platform = "অন্যান্য";
+          let orderId = "";
+          let trackingId = "";
+
+          // ১. অর্ডার আইডি চেক
+          if (flipkartOrderRegex.test(pageText)) {
+            platform = "Flipkart";
+            orderId = pageText.match(flipkartOrderRegex)[0];
+          } else if (amazonOrderRegex.test(pageText)) {
+            platform = "Amazon";
+            orderId = pageText.match(amazonOrderRegex)[0];
+          } else if (meeshoOrderRegex.test(pageText)) {
+            platform = "Meesho";
+            orderId = pageText.match(meeshoOrderRegex)[0];
           }
-        });
-        video.srcObject = stream;
-        statusBox.innerText = "ক্যামেরা তৈরি। বক্সে লেখা রেখে 'স্ক্যান করুন' চাপুন।";
-      } catch (err) {
-        statusBox.innerText = "ক্যামেরা পারমিশন অন করুন!";
-      }
 
-      codeReader = new ZXing.BrowserMultiFormatReader();
-      worker = await Tesseract.createWorker('eng');
-    }
-
-    async function processFrame() {
-      if (!video.videoWidth) return;
-      snapBtn.disabled = true;
-      snapBtn.innerText = "পড়ছে...";
-      statusBox.style.borderLeftColor = "#38bdf8";
-      statusBox.innerText = "🔍 আইডি শনাক্ত করা হচ্ছে...";
-
-      const w = video.videoWidth;
-      const h = video.videoHeight;
-      const cropW = Math.floor(w * 0.9);
-      const cropH = Math.floor(h * 0.4);
-      const cropX = Math.floor((w - cropW) / 2);
-      const cropY = Math.floor((h - cropH) / 2);
-
-      canvas.width = cropW;
-      canvas.height = cropH;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-
-      // ১. প্রথমে দ্রুত বারকোড চেষ্টা
-      try {
-        const barcodeResult = await codeReader.decodeFromCanvas(canvas);
-        if (barcodeResult) {
-          let bText = barcodeResult.getText().trim();
-          for (let p of patterns) {
-            let m = bText.match(p.regex);
-            if (m) {
-              addOrderId(m[0], p.name);
-              finishSnap();
-              return;
+          // ২. ট্র্যাকিং আইডি (AWB) খোঁজা
+          for (let reg of trackingPatterns) {
+            let m = pageText.match(reg);
+            if (m && m[0] !== orderId) {
+              trackingId = m[0];
+              break;
             }
           }
-          addOrderId(bText, "Barcode");
-          finishSnap();
-          return;
-        }
-      } catch (e) {}
 
-      // ২. বারকোড না পেলে স্পষ্ট OCR টেক্সট রিড
-      try {
-        // কনট্রাস্ট বাড়িয়ে লেখা পরিষ্কার করা
-        let imgData = ctx.getImageData(0, 0, cropW, cropH);
-        let d = imgData.data;
-        for (let i = 0; i < d.length; i += 4) {
-          let v = (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114);
-          v = v > 120 ? 255 : 0; // সাদা-কালো ফিল্টার
-          d[i] = d[i+1] = d[i+2] = v;
-        }
-        ctx.putImageData(imgData, 0, 0);
-
-        const ret = await worker.recognize(canvas);
-        const text = ret.data.text.replace(/\s+/g, ' ');
-
-        let matched = false;
-        for (let p of patterns) {
-          let match = text.match(p.regex);
-          if (match) {
-            addOrderId(match[0], p.name);
-            matched = true;
-            break;
+          // যদি অর্ডার আইডি পাওয়া যায়
+          if (orderId) {
+            if (!extractedData.some(d => d.orderId === orderId)) {
+              extractedData.push({
+                platform: platform,
+                orderId: orderId,
+                trackingId: trackingId || "নেই",
+                page: pageNum
+              });
+            }
           }
         }
 
-        if (!matched) {
-          statusBox.style.borderLeftColor = "#ef4444";
-          statusBox.innerHTML = "❌ আইডি বোঝা যায়নি! ক্যামেরা একটু দূরে রেখে লেখা পরিষ্কার রাখুন।";
-        }
+        statusBox.innerHTML = `✅ সফল! মোট <b>${extractedData.length}</b> টি অর্ডার পাওয়া গেছে।`;
+        renderTable();
       } catch (err) {
-        statusBox.innerText = "সমস্যা হয়েছে, আবার চেষ্টা করুন।";
+        statusBox.innerHTML = "❌ PDF পড়তে সমস্যা হয়েছে! সঠিক ফাইল দিন।";
       }
-
-      finishSnap();
     }
 
-    function finishSnap() {
-      snapBtn.disabled = false;
-      snapBtn.innerText = "📸 স্ক্যান করুন";
+    function renderTable() {
+      const tableBody = document.getElementById('tableBody');
+      tableBody.innerHTML = '';
+      extractedData.forEach((row, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${i + 1}</td><td><b>${row.platform}</b></td><td>${row.orderId}</td><td>${row.trackingId}</td>`;
+        tableBody.appendChild(tr);
+      });
+      document.getElementById('resultsBox').style.display = 'block';
+      document.getElementById('exportBtn').style.display = 'block';
+      document.getElementById('clearBtn').style.display = 'block';
     }
 
-    function exportExcel() {
-      if (!scannedData.length) return alert("কোনো ডাটা নেই!");
-      let csv = "Serial,Platform,Order ID,Date,Time\n";
-      scannedData.forEach((r, i) => csv += `${i + 1},"${r.platform}","${r.id}",${r.date},${r.time}\n`);
+    function exportToCSV() {
+      if (!extractedData.length) return;
+      let csv = "Serial,Platform,Order ID,Tracking ID\n";
+      extractedData.forEach((r, i) => {
+        csv += `${i + 1},"${r.platform}","${r.orderId}","${r.trackingId}"\n`;
+      });
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `Orders_${new Date().toISOString().slice(0,10)}.csv`;
+      link.download = `Orders_List_${new Date().toISOString().slice(0,10)}.csv`;
       link.click();
     }
 
     function clearData() {
-      if (confirm("সব ক্লিয়ার করবেন?")) {
-        scannedData = [];
-        updateUI();
-        statusBox.innerText = "তালিকা খালি করা হয়েছে।";
-      }
+      extractedData = [];
+      document.getElementById('tableBody').innerHTML = '';
+      document.getElementById('resultsBox').style.display = 'none';
+      document.getElementById('exportBtn').style.display = 'none';
+      document.getElementById('clearBtn').style.display = 'none';
+      document.getElementById('statusBox').innerHTML = 'ক্লিয়ার করা হয়েছে।';
+      document.getElementById('pdfInput').value = '';
     }
-
-    window.onload = initCamera;
   </script>
 </body>
 </html>
