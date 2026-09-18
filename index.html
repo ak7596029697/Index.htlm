@@ -9,7 +9,7 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-    .container { width: 100%; max-width: 650px; background: #1e293b; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    .container { width: 100%; max-width: 900px; background: #1e293b; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
     h1 { font-size: 20px; color: #38bdf8; text-align: center; margin-bottom: 6px; }
     p.subtitle { font-size: 13px; color: #94a3b8; text-align: center; margin-bottom: 20px; }
     .upload-box { border: 2px dashed #38bdf8; border-radius: 8px; padding: 30px 15px; text-align: center; cursor: pointer; background: rgba(56, 189, 248, 0.05); }
@@ -21,23 +21,25 @@
     button { flex: 1; padding: 12px; font-size: 14px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
     .btn-export { background: #10b981; color: white; display: none; }
     .btn-clear { background: #ef4444; color: white; display: none; flex: 0 0 60px; }
-    .results { margin-top: 20px; max-height: 300px; overflow-y: auto; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
+    .results { margin-top: 20px; max-height: 400px; overflow-y: auto; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
     th, td { padding: 10px; border-bottom: 1px solid #334155; }
     th { background: #1e293b; color: #94a3b8; position: sticky; top: 0; }
     td { font-family: monospace; }
+    .badge-unique { background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; }
+    .badge-duplicate { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; }
   </style>
 </head>
 <body>
 
   <div class="container">
     <h1>📄 Label PDF to Excel Extractor</h1>
-    <p class="subtitle">Flipkart, Amazon ও Meesho শিপিং লেবেল PDF থেকে এক্সেল ফাইল</p>
+    <p class="subtitle">Flipkart, Amazon ও Meesho শিপিং লেবেল PDF থেকে এক্সেল ও ডুপ্লিকেট ট্র্যাকার</p>
 
     <label class="upload-box" for="pdfInput">
       <div class="upload-icon">📑</div>
       <div style="font-size: 15px; font-weight: bold;">শিপিং লেবেল PDF ফাইলটি বেছে নিন</div>
-      <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">(১০০+ পেজ হলেও সেকেন্ডেই কাজ করবে)</div>
+      <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">(একই অর্ডার ২ বার থাকলে নিজে থেকেই ডুপ্লিকেট ধরবে)</div>
       <input type="file" id="pdfInput" accept="application/pdf" onchange="processPDF(this)">
     </label>
 
@@ -53,7 +55,9 @@
         <thead>
           <tr>
             <th>#</th>
+            <th>স্ট্যাটাস</th>
             <th>প্ল্যাটফর্ম</th>
+            <th>কুরিয়ার পার্টনার</th>
             <th>অর্ডার আইডি</th>
             <th>ট্র্যাকিং আইডি (AWB)</th>
           </tr>
@@ -68,26 +72,63 @@
 
     let extractedData = [];
 
-    // ফরম্যাট প্যাটার্ন
+    // প্ল্যাটফর্ম ও অর্ডার আইডি প্যাটার্ন
     const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
     const meeshoOrderRegex   = /\b\d{16,20}_\d+\b/;
 
-    // সাধারণ ট্র্যাকিং আইডি প্যাটার্ন
-    const trackingPatterns = [
-      /\bFMPC\w+\b/i,
-      /\bFMPP\w+\b/i,
-      /\bSF\d{9,}\b/i,
-      /\b\d{12,14}\b/,
-      /\bDELHIVERY\w*\b/i,
-      /\bECOM\w*\b/i
-    ];
+    // কুরিয়ার কোম্পানির নাম শনাক্তকরণ
+    function getCourierPartner(text) {
+      if (/Delhivery/i.test(text)) return "Delhivery";
+      if (/Shadowfax/i.test(text)) return "Shadowfax";
+      if (/Ekart|eKart/i.test(text)) return "Ekart";
+      if (/Xpressbees/i.test(text)) return "Xpressbees";
+      if (/Ecom\s*Express/i.test(text)) return "Ecom Express";
+      if (/Amazon\s*Shipping|ATS/i.test(text)) return "Amazon Shipping";
+      if (/DTDC/i.test(text)) return "DTDC";
+      if (/Bluedart|Blue\s*Dart/i.test(text)) return "Blue Dart";
+      return "অন্যান্য";
+    }
+
+    // ট্র্যাকিং আইডি বের করার নিয়ম
+    function extractTrackingNumber(text, orderId) {
+      const awbPrefixMatch = text.match(/(?:AWB|TRACKING(?:\s*NO)?|WAYBILL|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{8,22})/i);
+      if (awbPrefixMatch && awbPrefixMatch[1] && awbPrefixMatch[1] !== orderId) {
+        return awbPrefixMatch[1].trim();
+      }
+
+      const specificPatterns = [
+        /\b(FMPC[A-Z0-9]+)\b/i,
+        /\b(FMPP[A-Z0-9]+)\b/i,
+        /\b(SF\d{9,16})\b/i,
+        /\b(1\d{11,14})\b/,
+        /\b(3\d{11,14})\b/,
+        /\b(\d{12,15})\b/
+      ];
+
+      for (let reg of specificPatterns) {
+        const matches = text.match(new RegExp(reg, 'g'));
+        if (matches) {
+          for (let m of matches) {
+            let clean = m.trim();
+            if (clean !== orderId && !clean.startsWith("19") && clean.length >= 10 && clean.length <= 16) {
+              return clean;
+            }
+          }
+        }
+      }
+
+      return "নেই";
+    }
 
     async function processPDF(input) {
       const file = input.files[0];
       if (!file) return;
 
       extractedData = [];
+      const seenOrderIds = new Set();
+      let duplicateCount = 0;
+
       const statusBox = document.getElementById('statusBox');
       const exportBtn = document.getElementById('exportBtn');
       const clearBtn = document.getElementById('clearBtn');
@@ -113,9 +154,8 @@
 
           let platform = "অন্যান্য";
           let orderId = "";
-          let trackingId = "";
 
-          // ১. অর্ডার আইডি চেক
+          // ১. প্ল্যাটফর্ম ও অর্ডার আইডি নির্ধারণ
           if (flipkartOrderRegex.test(pageText)) {
             platform = "Flipkart";
             orderId = pageText.match(flipkartOrderRegex)[0];
@@ -127,29 +167,33 @@
             orderId = pageText.match(meeshoOrderRegex)[0];
           }
 
-          // ২. ট্র্যাকিং আইডি (AWB) খোঁজা
-          for (let reg of trackingPatterns) {
-            let m = pageText.match(reg);
-            if (m && m[0] !== orderId) {
-              trackingId = m[0];
-              break;
-            }
-          }
+          let courier = getCourierPartner(pageText);
+          let trackingId = extractTrackingNumber(pageText, orderId);
 
-          // যদি অর্ডার আইডি পাওয়া যায়
           if (orderId) {
-            if (!extractedData.some(d => d.orderId === orderId)) {
-              extractedData.push({
-                platform: platform,
-                orderId: orderId,
-                trackingId: trackingId || "নেই",
-                page: pageNum
-              });
+            let isDuplicate = seenOrderIds.has(orderId);
+            if (isDuplicate) {
+              duplicateCount++;
+            } else {
+              seenOrderIds.add(orderId);
             }
+
+            extractedData.push({
+              platform: platform,
+              courier: courier,
+              orderId: orderId,
+              trackingId: trackingId,
+              status: isDuplicate ? "Duplicate" : "Unique",
+              page: pageNum
+            });
           }
         }
 
-        statusBox.innerHTML = `✅ সফল! মোট <b>${extractedData.length}</b> টি অর্ডার পাওয়া গেছে।`;
+        let summaryText = `✅ মোট <b>${extractedData.length}</b> টি এন্ট্রি পাওয়া গেছে।`;
+        if (duplicateCount > 0) {
+          summaryText += ` (⚠️ <b>${duplicateCount}</b> টি ডুপ্লিকেট শনাক্ত হয়েছে)`;
+        }
+        statusBox.innerHTML = summaryText;
         renderTable();
       } catch (err) {
         statusBox.innerHTML = "❌ PDF পড়তে সমস্যা হয়েছে! সঠিক ফাইল দিন।";
@@ -161,7 +205,17 @@
       tableBody.innerHTML = '';
       extractedData.forEach((row, i) => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${i + 1}</td><td><b>${row.platform}</b></td><td>${row.orderId}</td><td>${row.trackingId}</td>`;
+        const badgeClass = row.status === 'Duplicate' ? 'badge-duplicate' : 'badge-unique';
+        const badgeText = row.status === 'Duplicate' ? 'ডুপ্লিকেট' : 'নতুন';
+
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td><span class="${badgeClass}">${badgeText}</span></td>
+          <td><b>${row.platform}</b></td>
+          <td><span style="color:#38bdf8;">${row.courier}</span></td>
+          <td>${row.orderId}</td>
+          <td>${row.trackingId}</td>
+        `;
         tableBody.appendChild(tr);
       });
       document.getElementById('resultsBox').style.display = 'block';
@@ -171,9 +225,9 @@
 
     function exportToCSV() {
       if (!extractedData.length) return;
-      let csv = "Serial,Platform,Order ID,Tracking ID\n";
+      let csv = "Serial,Status,Platform,Courier Partner,Order ID,Tracking ID\n";
       extractedData.forEach((r, i) => {
-        csv += `${i + 1},"${r.platform}","${r.orderId}","${r.trackingId}"\n`;
+        csv += `${i + 1},"${r.status}","${r.platform}","${r.courier}","${r.orderId}","${r.trackingId}"\n`;
       });
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement("a");
