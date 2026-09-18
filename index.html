@@ -50,13 +50,16 @@
 
     .btn-del-row { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 14px; padding: 2px 6px; }
     .btn-del-row:hover { background: rgba(239, 68, 68, 0.2); border-radius: 4px; }
+    
+    .track-link { color: #38bdf8; text-decoration: underline; font-weight: bold; cursor: pointer; }
+    .track-link:hover { color: #7dd3fc; }
   </style>
 </head>
 <body>
 
   <div class="container">
     <h1>📄 Dispatch & Return Order Manager</h1>
-    <p class="subtitle">Amazon, Flipkart ও Meesho শিপিং লেবেল ও রিটার্ন ট্র্যাকার</p>
+    <p class="subtitle">Amazon, Flipkart ও Meesho শিপিং লেবেল ও সরাসরি লাইভ ট্র্যাকিং</p>
 
     <div class="grid-sections">
       <div class="card card-dispatch">
@@ -108,7 +111,7 @@
             <th>প্ল্যাটফর্ম</th>
             <th>কুরিয়ার পার্টনার</th>
             <th>অর্ডার আইডি</th>
-            <th>ট্র্যাকিং আইডি (AWB)</th>
+            <th>ট্র্যাকিং আইডি (ক্লিক করে ট্র্যাক করুন)</th>
             <th style="text-align:center;">অ্যাকশন</th>
           </tr>
         </thead>
@@ -126,7 +129,6 @@
     let extractedData = [];
     let ocrWorker = null;
 
-    // ব্যাকগ্রাউন্ডে OCR রেডি করা
     async function initOCR() {
       if (!ocrWorker) {
         ocrWorker = await Tesseract.createWorker('eng');
@@ -138,13 +140,33 @@
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
     const meeshoOrderRegex   = /\b\d{16,20}_\d+\b/;
 
+    // সরাসরি ট্র্যাকিং ওয়েবসাইটের লিঙ্ক তৈরি
+    function getTrackingUrl(courier, trackingId) {
+      if (!trackingId || trackingId === "নেই") return null;
+      const cleanAwb = encodeURIComponent(trackingId.trim());
+
+      if (courier.includes("Delhivery")) {
+        return `https://www.delhivery.com/track/package/${cleanAwb}`;
+      } else if (courier.includes("Xpressbees")) {
+        return `https://www.xpressbees.com/shipment/tracking?awb=${cleanAwb}`;
+      } else if (courier.includes("Shadowfax")) {
+        return `https://tracker.shadowfax.in/#/track/${cleanAwb}`;
+      } else if (courier.includes("Ekart")) {
+        return `https://ekartlogistics.com/shipmenttrack/${cleanAwb}`;
+      } else if (courier.includes("Amazon")) {
+        return `https://track.amazon.in/tracking/${cleanAwb}`;
+      } else if (courier.includes("Ecom Express")) {
+        return `https://ecomexpress.in/tracking/?awb_number=${cleanAwb}`;
+      }
+      return `https://www.google.com/search?q=${cleanAwb}+tracking`;
+    }
+
     function extractDate(text) {
       const dMatch = text.match(/\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4})\b/);
       if (dMatch) return dMatch[1];
       return new Date().toISOString().slice(0,10);
     }
 
-    // অ্যামাজনের ছবির উপরের "AWB XXXXXXXXXXXX" অংশটুকু OCR দিয়ে পড়ার ফাংশন
     async function extractAmazonAWBFromImage(page) {
       try {
         const viewport = page.getViewport({ scale: 2.0 });
@@ -155,7 +177,6 @@
 
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
 
-        // শুধু বারকোডের নিচের টেক্সট অংশটুকু (AWB 3726...) নিখুঁতভাবে ক্রপ করা
         const cropCanvas = document.getElementById('cropCanvas');
         cropCanvas.width = canvas.width * 0.55;
         cropCanvas.height = canvas.height * 0.22;
@@ -258,7 +279,6 @@
             const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
             const pageText = items.join(' ');
 
-            // পেজে কোনো টেক্সট না থাকলে (যেমন Amazon ইমেজ লেবেল) OCR চালানো
             if (items.length === 0 || pageText.includes("AWB") || pageText.length < 50) {
               let awb = await extractAmazonAWBFromImage(page);
               if (awb) pendingAmazonAWB = awb;
@@ -407,7 +427,7 @@
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
-          const cols = line.split(',').map(s => s.replace(/^"|"$/g, ''));
+          const cols = line.split(',').map(s => s.replace(/^"|'|"\t|^\t|\t$/g, '').replace(/^"\vert{}"$/g, ''));
           if (cols.length >= 7) {
             extractedData.push({
               status: cols[1],
@@ -437,86 +457,4 @@
 
     function deleteSingleRow(index) {
       extractedData.splice(index, 1);
-      const dupCount = refreshDuplicateStatus();
-      updateUI(dupCount);
-    }
-
-    function updateUI(duplicateCount) {
-      const statusBox = document.getElementById('statusBox');
-      let returnCount = extractedData.filter(d => d.status === "Returned").length;
-      let summaryText = `✅ মোট আছে: <b>${extractedData.length}</b> টি অর্ডার।`;
-      if (returnCount > 0) summaryText += ` (⚠️ রিটার্ন: <b style="color:#f59e0b;">${returnCount}</b> টি)`;
-      if (duplicateCount > 0) summaryText += ` (⚠️ ডুপ্লিকেট: <b>${duplicateCount}</b> টি)`;
-      statusBox.innerHTML = summaryText;
-      renderTable();
-    }
-
-    function renderTable() {
-      const tableBody = document.getElementById('tableBody');
-      tableBody.innerHTML = '';
-      let hasDuplicates = false;
-
-      extractedData.forEach((row, i) => {
-        if (row.status === 'Duplicate') hasDuplicates = true;
-        const tr = document.createElement('tr');
-        
-        let badgeClass = 'badge-unique';
-        let badgeText = 'ডেলিভারি/প্রসেসিং';
-
-        if (row.status === 'Duplicate') {
-          badgeClass = 'badge-duplicate';
-          badgeText = 'ডুপ্লিকেট';
-        } else if (row.status === 'Returned') {
-          badgeClass = 'badge-returned';
-          badgeText = '⚠️ রিটার্ন এসেছে';
-          tr.className = 'row-returned';
-        }
-
-        tr.innerHTML = `
-          <td>${i + 1}</td>
-          <td><span class="${badgeClass}">${badgeText}</span></td>
-          <td style="color:#94a3b8;">${row.date}</td>
-          <td><b>${row.platform}</b></td>
-          <td><span style="color:#38bdf8; font-weight:bold;">${row.courier}</span></td>
-          <td>${row.orderId}</td>
-          <td style="color:${row.trackingId === 'নেই' ? '#f87171' : '#34d399'}; font-weight:bold;">${row.trackingId}</td>
-          <td style="text-align:center;">
-            <button class="btn-del-row" onclick="deleteSingleRow(${i})" title="মুছুন">❌</button>
-          </td>
-        `;
-        tableBody.appendChild(tr);
-      });
-
-      const show = extractedData.length > 0;
-      document.getElementById('resultsBox').style.display = show ? 'block' : 'none';
-      document.getElementById('exportBtn').style.display = show ? 'block' : 'none';
-      document.getElementById('clearBtn').style.display = show ? 'block' : 'none';
-      document.getElementById('removeDupBtn').style.display = (show && hasDuplicates) ? 'block' : 'none';
-    }
-
-    function exportToCSV() {
-      if (!extractedData.length) return;
-      let csv = "Serial,Status,Date,Platform,Courier Partner,Order ID,Tracking ID\n";
-      extractedData.forEach((r, i) => {
-        csv += `${i + 1},"${r.status}","${r.date}","${r.platform}","${r.courier}","${r.orderId}","${r.trackingId}"\n`;
-      });
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `Orders_Report_${new Date().toISOString().slice(0,10)}.csv`;
-      link.click();
-    }
-
-    function clearData() {
-      extractedData = [];
-      document.getElementById('tableBody').innerHTML = '';
-      document.getElementById('resultsBox').style.display = 'none';
-      document.getElementById('exportBtn').style.display = 'none';
-      document.getElementById('removeDupBtn').style.display = 'none';
-      document.getElementById('clearBtn').style.display = 'none';
-      document.getElementById('statusBox').innerHTML = 'সব তথ্য মুছে ফেলা হয়েছে।';
-      document.getElementById('pdfInput').value = '';
-    }
-  </script>
-</body>
-</html>
+      const dupCount = refreshDup
