@@ -4,9 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bulk Shipping & Return Order Manager</title>
-  <!-- PDF.js & Tesseract OCR Library -->
+  <!-- PDF.js Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
@@ -32,7 +31,10 @@
 
     .status-bar { margin-top: 15px; font-size: 14px; text-align: center; font-weight: bold; color: #38bdf8; min-height: 20px; }
     .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
-    button.action-btn { padding: 10px 14px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
+    button.action-btn { padding: 10px 14px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+    
+    .btn-save { background: #3b82f6; color: white; display: none; flex: 1.5; }
+    .btn-save:hover { background: #2563eb; }
     .btn-export { background: #10b981; color: white; display: none; flex: 2; }
     .btn-remove-dup { background: #64748b; color: white; display: none; flex: 1.5; }
     .btn-clear { background: #ef4444; color: white; display: none; width: 45px; }
@@ -59,7 +61,7 @@
 
   <div class="container">
     <h1>📄 Dispatch & Return Order Manager</h1>
-    <p class="subtitle">Amazon, Flipkart ও Meesho শিপিং লেবেল ও রিটার্ন ট্র্যাকার</p>
+    <p class="subtitle">শিপিং লেবেল থেকে অর্ডার সংগ্রহ ও মেমরিতে সংরক্ষণ সিস্টেম</p>
 
     <div class="grid-sections">
       <div class="card card-dispatch">
@@ -70,12 +72,6 @@
           <div style="font-size: 11px; color: #94a3b8;">(Amazon, Flipkart, Meesho এক বা একাধিক ফাইল)</div>
           <input type="file" id="pdfInput" accept="application/pdf" multiple onchange="processMultiplePDFs(this)">
         </label>
-        <div style="margin-top: 8px; text-align: center;">
-          <label style="font-size: 11px; color: #38bdf8; text-decoration: underline; cursor: pointer;">
-            আগের সেভ করা CSV ফাইল আপলোড করুন
-            <input type="file" accept=".csv" onchange="importExistingCSV(this)">
-          </label>
-        </div>
       </div>
 
       <div class="card card-return">
@@ -83,7 +79,7 @@
         <label class="upload-box" for="returnPdfInput" style="border-color: #f59e0b; background: rgba(245, 158, 11, 0.04);">
           <div style="font-size: 24px;">📥</div>
           <div style="font-size: 13px; font-weight: bold; margin-top: 4px;">রিটার্ন স্লিপের PDF দিন</div>
-          <div style="font-size: 11px; color: #f59e0b;">(রিটার্ন স্লিপের PDF ফাইল)</div>
+          <div style="font-size: 11px; color: #f59e0b;">(রিটার্ন স্লিপ ফাইল থাকলে)</div>
           <input type="file" id="returnPdfInput" accept="application/pdf" multiple onchange="processReturnPDFs(this)">
         </label>
         <div class="return-input-group">
@@ -96,9 +92,10 @@
     <div class="status-bar" id="statusBox"></div>
 
     <div class="controls">
+      <button class="action-btn btn-save" id="saveBtn" onclick="manualSaveToMemory()">💾 মেমরিতে সেভ করুন</button>
       <button class="action-btn btn-export" id="exportBtn" onclick="exportToCSV()">📥 সব অর্ডারের Excel (CSV) ডাউনলোড</button>
       <button class="action-btn btn-remove-dup" id="removeDupBtn" onclick="removeOnlyDuplicates()">🧹 ডুপ্লিকেট মুছুন</button>
-      <button class="action-btn btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️</button>
+      <button class="action-btn btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️ সব মুছুন</button>
     </div>
 
     <div class="results" id="resultsBox" style="display:none;">
@@ -120,21 +117,11 @@
     </div>
   </div>
 
-  <canvas id="hiddenCanvas" style="display:none;"></canvas>
-  <canvas id="cropCanvas" style="display:none;"></canvas>
-
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-    let extractedData = [];
-    let ocrWorker = null;
-
-    async function initOCR() {
-      if (!ocrWorker) {
-        ocrWorker = await Tesseract.createWorker('eng');
-      }
-      return ocrWorker;
-    }
+    // ব্রাউজারের মেমোরি থেকে পূর্বে সংরক্ষিত তথ্য লোড করা
+    let extractedData = JSON.parse(localStorage.getItem('my_orders_db') || '[]');
 
     const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
@@ -164,36 +151,6 @@
         return `https://ecomexpress.in/tracking/?awb_number=${cleanAwb}`;
       }
       return `https://www.google.com/search?q=${cleanAwb}+tracking`;
-    }
-
-    async function extractAmazonAWBFromImage(page) {
-      try {
-        const viewport = page.getViewport({ scale: 2.0 });
-        const canvas = document.getElementById('hiddenCanvas');
-        const ctx = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-
-        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-
-        const cropCanvas = document.getElementById('cropCanvas');
-        cropCanvas.width = canvas.width * 0.55;
-        cropCanvas.height = canvas.height * 0.22;
-        const cropCtx = cropCanvas.getContext('2d');
-        cropCtx.drawImage(canvas, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
-
-        const worker = await initOCR();
-        const ret = await worker.recognize(cropCanvas);
-        const ocrText = ret.data.text;
-
-        const match = ocrText.match(/AWB\s*([0-9]{10,14})/i) || ocrText.match(/\b(37[0-9]{10})\b/);
-        if (match && match[1]) {
-          return match[1].trim();
-        }
-      } catch (err) {
-        console.error("OCR Error:", err);
-      }
-      return null;
     }
 
     function detectCourier(text, trackingId, platform) {
@@ -259,6 +216,15 @@
       return dupCount;
     }
 
+    // আপনার পছন্দের "মেমরিতে সেভ করুন" ফাংশন
+    function manualSaveToMemory() {
+      localStorage.setItem('my_orders_db', JSON.stringify(extractedData));
+      const statusBox = document.getElementById('statusBox');
+      statusBox.innerHTML = `💾 <b>সফলভাবে ব্রাউজার মেমরিতে সেভ হয়েছে!</b> (মোট সংরক্ষিত: ${extractedData.length} টি)`;
+      statusBox.style.color = '#10b981';
+      setTimeout(() => { statusBox.style.color = '#38bdf8'; }, 3000);
+    }
+
     async function processMultiplePDFs(input) {
       const files = input.files;
       if (!files || files.length === 0) return;
@@ -275,19 +241,12 @@
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           const totalPages = pdf.numPages;
 
-          let pendingAmazonAWB = "";
-
           for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-            statusBox.innerHTML = `⏳ প্রসেস হচ্ছে: পাতা ${pageNum} / ${totalPages}`;
+            statusBox.innerHTML = `⏳ পাতা প্রসেস হচ্ছে: ${pageNum} / ${totalPages}`;
             const page = await pdf.getPage(pageNum);
             const textContent = await page.getTextContent();
             const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
             const pageText = items.join(' ');
-
-            if (items.length === 0 || pageText.includes("AWB") || pageText.length < 50) {
-              let awb = await extractAmazonAWBFromImage(page);
-              if (awb) pendingAmazonAWB = awb;
-            }
 
             let platform = "অন্যান্য";
             let orderId = "";
@@ -305,11 +264,6 @@
 
             if (orderId) {
               let trackingId = findTrackingNumber(pageText, orderId, platform);
-              
-              if ((trackingId === "নেই" || platform === "Amazon") && pendingAmazonAWB) {
-                trackingId = pendingAmazonAWB;
-              }
-
               let courier = detectCourier(pageText, trackingId, platform);
               let orderDate = extractDate(pageText);
 
@@ -321,8 +275,6 @@
                 trackingId: trackingId,
                 status: "Unique"
               });
-
-              pendingAmazonAWB = "";
             }
           }
         } catch (err) {
@@ -333,17 +285,18 @@
       const duplicateCount = refreshDuplicateStatus();
       updateUI(duplicateCount);
       input.value = '';
+      statusBox.innerHTML = `✅ নতুন ফাইল লোড হয়েছে! সংরক্ষণ করতে নীল <b>"💾 মেমরিতে সেভ করুন"</b> বাটনে চাপ দিন।`;
     }
 
     function handleManualReturn() {
       const input = document.getElementById('manualReturnId');
       const val = input.value.trim();
       if (!val) return;
-      markAsReturned(val, "অন্যান্য");
+      markAsReturned(val);
       input.value = '';
     }
 
-    function markAsReturned(searchKey, detectedPlatform) {
+    function markAsReturned(searchKey) {
       let found = false;
       extractedData.forEach(item => {
         if (item.orderId.toLowerCase() === searchKey.toLowerCase() || 
@@ -354,16 +307,16 @@
       });
 
       if (!found) {
-        let pForm = detectedPlatform || "অন্যান্য";
+        let pForm = "অন্যান্য";
         let cName = "অন্যান্য";
 
-        if (amazonOrderRegex.test(searchKey) || pForm === "Amazon") {
+        if (amazonOrderRegex.test(searchKey)) {
           pForm = "Amazon";
           cName = "Amazon Shipping (ATS)";
-        } else if (flipkartOrderRegex.test(searchKey) || pForm === "Flipkart") {
+        } else if (flipkartOrderRegex.test(searchKey)) {
           pForm = "Flipkart";
           cName = "Ekart";
-        } else if (meeshoOrderRegex.test(searchKey) || pForm === "Meesho") {
+        } else if (meeshoOrderRegex.test(searchKey)) {
           pForm = "Meesho";
           cName = "Delhivery / Xpressbees";
         }
@@ -379,7 +332,7 @@
       }
 
       updateUI(refreshDuplicateStatus());
-      document.getElementById('statusBox').innerHTML = `⚠️ <b>${searchKey}</b> রিটার্ন হিসেবে চিহ্নিত হয়েছে!`;
+      document.getElementById('statusBox').innerHTML = `⚠️ <b>${searchKey}</b> রিটার্ন চিহ্নিত হয়েছে! সংরক্ষণ করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
     }
 
     async function processReturnPDFs(input) {
@@ -395,59 +348,18 @@
             const textContent = await page.getTextContent();
             const pageText = textContent.items.map(item => item.str.trim()).join(' ');
 
-            let pForm = "অন্যান্য";
             let orderId = "";
-            if (amazonOrderRegex.test(pageText)) {
-              pForm = "Amazon";
-              orderId = pageText.match(amazonOrderRegex)[0];
-            } else if (flipkartOrderRegex.test(pageText)) {
-              pForm = "Flipkart";
-              orderId = pageText.match(flipkartOrderRegex)[0];
-            } else if (meeshoOrderRegex.test(pageText)) {
-              pForm = "Meesho";
-              orderId = pageText.match(meeshoOrderRegex)[0];
-            }
+            if (flipkartOrderRegex.test(pageText)) orderId = pageText.match(flipkartOrderRegex)[0];
+            else if (amazonOrderRegex.test(pageText)) orderId = pageText.match(amazonOrderRegex)[0];
+            else if (meeshoOrderRegex.test(pageText)) orderId = pageText.match(meeshoOrderRegex)[0];
 
-            let trackingId = await extractAmazonAWBFromImage(page) || findTrackingNumber(pageText, orderId || "0", pForm);
+            let trackingId = findTrackingNumber(pageText, orderId || "0", "অন্যান্য");
 
-            if (orderId) {
-              markAsReturned(orderId, pForm);
-            } else if (trackingId !== "নেই") {
-              markAsReturned(trackingId, pForm);
-            }
+            if (orderId) markAsReturned(orderId);
+            else if (trackingId !== "নেই") markAsReturned(trackingId);
           }
-        } catch (e) {
-          console.error(e);
-        }
+        } catch (e) {}
       }
-      input.value = '';
-    }
-
-    function importExistingCSV(input) {
-      const file = input.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const lines = e.target.result.split('\n');
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          const cols = line.split(',').map(s => s.replace(/^"|'|"\t|^\t|\t$/g, '').replace(/^"\vert{}"$/g, ''));
-          if (cols.length >= 7) {
-            extractedData.push({
-              status: cols[1],
-              date: cols[2],
-              platform: cols[3],
-              courier: cols[4],
-              orderId: cols[5],
-              trackingId: cols[6]
-            });
-          }
-        }
-        updateUI(refreshDuplicateStatus());
-        document.getElementById('statusBox').innerHTML = `📥 পূর্বের CSV সফলভাবে লোড হয়েছে!`;
-      };
-      reader.readAsText(file);
       input.value = '';
     }
 
@@ -457,19 +369,20 @@
       const removedCount = initialCount - extractedData.length;
       refreshDuplicateStatus();
       updateUI(0);
-      document.getElementById('statusBox').innerHTML = `🧹 <b>${removedCount}</b> টি ডুপ্লিকেট মুছে ফেলা হয়েছে!`;
+      document.getElementById('statusBox').innerHTML = `🧹 <b>${removedCount}</b> টি ডুপ্লিকেট মুছে ফেলা হয়েছে! সেভ রাখতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
     }
 
     function deleteSingleRow(index) {
       extractedData.splice(index, 1);
       const dupCount = refreshDuplicateStatus();
       updateUI(dupCount);
+      document.getElementById('statusBox').innerHTML = `🗑️ একটি সারি মুছে ফেলা হয়েছে। স্থায়ী করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
     }
 
     function updateUI(duplicateCount) {
       const statusBox = document.getElementById('statusBox');
       let returnCount = extractedData.filter(d => d.status === "Returned").length;
-      let summaryText = `✅ মোট আছে: <b>${extractedData.length}</b> টি অর্ডার।`;
+      let summaryText = `📋 মোট অর্ডারের সংখ্যা: <b>${extractedData.length}</b> টি।`;
       if (returnCount > 0) summaryText += ` (⚠️ রিটার্ন: <b style="color:#f59e0b;">${returnCount}</b> টি)`;
       if (duplicateCount > 0) summaryText += ` (⚠️ ডুপ্লিকেট: <b>${duplicateCount}</b> টি)`;
       statusBox.innerHTML = summaryText;
@@ -523,6 +436,7 @@
 
       const show = extractedData.length > 0;
       document.getElementById('resultsBox').style.display = show ? 'block' : 'none';
+      document.getElementById('saveBtn').style.display = show ? 'block' : 'none';
       document.getElementById('exportBtn').style.display = show ? 'block' : 'none';
       document.getElementById('clearBtn').style.display = show ? 'block' : 'none';
       document.getElementById('removeDupBtn').style.display = (show && hasDuplicates) ? 'block' : 'none';
@@ -542,15 +456,27 @@
     }
 
     function clearData() {
-      extractedData = [];
-      document.getElementById('tableBody').innerHTML = '';
-      document.getElementById('resultsBox').style.display = 'none';
-      document.getElementById('exportBtn').style.display = 'none';
-      document.getElementById('removeDupBtn').style.display = 'none';
-      document.getElementById('clearBtn').style.display = 'none';
-      document.getElementById('statusBox').innerHTML = 'সব তথ্য মুছে ফেলা হয়েছে।';
-      document.getElementById('pdfInput').value = '';
+      if (confirm("আপনি কি নিশ্চিত যে সংরক্ষিত সব তথ্য মুছে ফেলতে চান?")) {
+        extractedData = [];
+        localStorage.removeItem('my_orders_db');
+        document.getElementById('tableBody').innerHTML = '';
+        document.getElementById('resultsBox').style.display = 'none';
+        document.getElementById('saveBtn').style.display = 'none';
+        document.getElementById('exportBtn').style.display = 'none';
+        document.getElementById('removeDupBtn').style.display = 'none';
+        document.getElementById('clearBtn').style.display = 'none';
+        document.getElementById('statusBox').innerHTML = 'সব তথ্য মুছে ফেলা হয়েছে।';
+        document.getElementById('pdfInput').value = '';
+      }
     }
+
+    // পূর্বে সেভ করা থাকলে পেজ খুলতেই লোড হবে
+    window.onload = function() {
+      if (extractedData.length > 0) {
+        updateUI(refreshDuplicateStatus());
+        document.getElementById('statusBox').innerHTML = `📦 পূর্বে সংরক্ষিত <b>${extractedData.length}</b> টি অর্ডার মেমরি থেকে লোড হয়েছে।`;
+      }
+    };
   </script>
 </body>
 </html>
