@@ -3,50 +3,53 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Smart Order ID OCR Scanner</title>
+  <title>E-commerce Order Scanner</title>
+  <!-- Barcode Scanner Library -->
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
+  <!-- OCR Library -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 12px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-    .header { width: 100%; max-width: 480px; text-align: center; margin-bottom: 12px; }
-    .header h1 { font-size: 20px; color: #38bdf8; }
-    .camera-container { position: relative; width: 100%; max-width: 480px; border-radius: 12px; overflow: hidden; background: #000; }
-    video { width: 100%; height: 260px; object-fit: cover; display: block; }
-    .viewfinder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; height: 60px; border: 2px dashed #38bdf8; border-radius: 8px; background: rgba(56, 189, 248, 0.1); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); pointer-events: none; }
-    .controls { width: 100%; max-width: 480px; display: flex; gap: 8px; margin-top: 12px; }
-    button { flex: 1; padding: 12px; font-size: 14px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
-    .btn-scan { background: #2563eb; color: white; }
+    .header { width: 100%; max-width: 480px; text-align: center; margin-bottom: 8px; }
+    .header h1 { font-size: 18px; color: #38bdf8; }
+    .header p { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+    .camera-container { position: relative; width: 100%; max-width: 480px; border-radius: 12px; overflow: hidden; background: #000; height: 260px; }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    .viewfinder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 88%; height: 75px; border: 2px dashed #10b981; border-radius: 8px; background: rgba(16, 185, 129, 0.1); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6); pointer-events: none; }
+    .viewfinder::after { content: "Flipkart / Amazon / Meesho আইডি ধরুন"; position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 10px; background: #10b981; color: #000; padding: 1px 6px; border-radius: 4px; font-weight: bold; white-space: nowrap; }
+    .controls { width: 100%; max-width: 480px; display: flex; gap: 8px; margin-top: 10px; }
+    button { flex: 1; padding: 11px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
     .btn-export { background: #10b981; color: white; }
     .btn-clear { background: #ef4444; color: white; flex: 0 0 45px; }
-    .status-card { width: 100%; max-width: 480px; background: #1e293b; padding: 10px; border-radius: 8px; margin-top: 10px; font-size: 13px; text-align: center; }
+    .status-card { width: 100%; max-width: 480px; background: #1e293b; padding: 9px; border-radius: 8px; margin-top: 10px; font-size: 12px; text-align: center; border-left: 4px solid #38bdf8; }
     .table-container { width: 100%; max-width: 480px; margin-top: 12px; flex-grow: 1; }
-    ul { list-style: none; max-height: 200px; overflow-y: auto; background: #1e293b; border-radius: 8px; }
-    li { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #334155; font-family: monospace; font-size: 13px; }
+    ul { list-style: none; max-height: 220px; overflow-y: auto; background: #1e293b; border-radius: 8px; border: 1px solid #334155; }
+    li { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #334155; font-family: monospace; font-size: 12px; }
   </style>
 </head>
 <body>
 
   <div class="header">
-    <h1>📦 Order ID Scanner</h1>
-    <p style="font-size:12px; color:#94a3b8;">বক্সের মধ্যে শুধু আইডি রেখে স্ক্যান চাপুন</p>
+    <h1>📦 Multi-Platform Order Scanner</h1>
+    <p>Flipkart | Amazon | Meesho অটো ডিটেকশন</p>
   </div>
 
   <div class="camera-container">
-    <video id="video" autoplay playsinline></video>
+    <video id="video" autoplay playsinline muted></video>
     <div class="viewfinder"></div>
     <canvas id="canvas" style="display:none;"></canvas>
   </div>
 
   <div class="controls">
-    <button class="btn-scan" id="scanBtn" onclick="captureAndScan()">📷 স্ক্যান করুন</button>
-    <button class="btn-export" onclick="exportExcel()">📥 Excel (CSV)</button>
-    <button class="btn-clear" onclick="clearData()">🗑️</button>
+    <button class="btn-export" onclick="exportExcel()">📥 Excel (CSV) ডাউনলোড</button>
+    <button class="btn-clear" onclick="clearData()" title="ক্লিয়ার">🗑️</button>
   </div>
 
-  <div class="status-card" id="statusBox">ক্যামেরা লোড হচ্ছে...</div>
+  <div class="status-card" id="statusBox">ক্যামেরা চালু হচ্ছে...</div>
 
   <div class="table-container">
-    <h3 style="font-size: 14px; margin-bottom: 6px;">তালিকা: <span id="count">0</span> টি</h3>
+    <h3 style="font-size: 13px; margin-bottom: 6px;">তালিকা: <span id="count">0</span> টি</h3>
     <ul id="itemsList"></ul>
   </div>
 
@@ -56,82 +59,140 @@
     const statusBox = document.getElementById('statusBox');
     const itemsList = document.getElementById('itemsList');
     const countBadge = document.getElementById('count');
-    const scanBtn = document.getElementById('scanBtn');
+
     let scannedData = JSON.parse(localStorage.getItem('saved_orders') || '[]');
+    let isProcessing = false;
+    let tesseractWorker = null;
+
+    // আপনার দেওয়া নির্দিষ্ট ৩টি প্ল্যাটফর্মের ফরম্যাট
+    const platformPatterns = [
+      { name: "Flipkart", regex: /\bOD\d{16,20}\b/i },
+      { name: "Amazon",   regex: /\b\d{3}-\d{7}-\d{7}\b/ },
+      { name: "Meesho",   regex: /\b\d{16,20}_\d+\b/ }
+    ];
 
     function updateUI() {
       itemsList.innerHTML = '';
       scannedData.slice().reverse().forEach((item, index) => {
         const li = document.createElement('li');
-        li.innerHTML = `<span><strong>#${scannedData.length - index}</strong> ${item.id}</span> <span>${item.time}</span>`;
+        li.innerHTML = `<span><b>#${scannedData.length - index}</b> [${item.platform}] ${item.id}</span> <span style="color:#94a3b8">${item.time}</span>`;
         itemsList.appendChild(li);
       });
       countBadge.innerText = scannedData.length;
       localStorage.setItem('saved_orders', JSON.stringify(scannedData));
     }
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      .then(stream => { video.srcObject = stream; statusBox.innerText = "ক্যামেরা তৈরি!"; })
-      .catch(err => { statusBox.innerText = "ক্যামেরা পারমিশন দিন"; });
+    function notifySuccess() {
+      if (navigator.vibrate) navigator.vibrate(150);
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        osc.connect(ctx.destination);
+        osc.frequency.value = 880;
+        osc.start();
+        setTimeout(() => osc.stop(), 120);
+      } catch(e) {}
+    }
 
-    const patterns = [
-      /\bOD\d{6,20}\b/i,
-      /\b\d{3}-\d{2}-\d+\b/,
-      /\b\d{10}-\d+\b/
-    ];
+    function addOrderId(rawId, platform) {
+      let id = rawId.trim().toUpperCase();
+      let exists = scannedData.some(d => d.id === id);
+      if (!exists) {
+        let now = new Date();
+        scannedData.push({
+          id: id,
+          platform: platform,
+          time: now.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
+          date: now.toISOString().slice(0, 10)
+        });
+        notifySuccess();
+        updateUI();
+        statusBox.style.borderLeftColor = "#10b981";
+        statusBox.innerHTML = `✅ [${platform}] সেভ হয়েছে: <b>${id}</b>`;
+      } else {
+        statusBox.style.borderLeftColor = "#f59e0b";
+        statusBox.innerHTML = `⚠️ আগেই তোলা হয়েছে: <b>${id}</b>`;
+      }
+    }
 
-    async function captureAndScan() {
-      scanBtn.disabled = true;
-      scanBtn.innerText = "পড়ছে...";
-      statusBox.innerText = "🔍 স্ক্যান হচ্ছে, অপেক্ষা করুন...";
+    async function init() {
+      updateUI();
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1280 } }
+        });
+        video.srcObject = stream;
+        statusBox.innerText = "ক্যামেরা তৈরি! পার্সেলের লেখা বা বারকোড বক্সে ধরুন।";
+      } catch (err) {
+        statusBox.innerText = "ক্যামেরা পারমিশন দিন!";
+        return;
+      }
 
-      const ctx = canvas.getContext('2d');
-      const w = video.videoWidth || 640;
-      const h = video.videoHeight || 480;
-      const cropW = w * 0.85;
-      const cropH = h * 0.3;
+      // বারকোড স্ক্যানার
+      const codeReader = new ZXing.BrowserMultiFormatReader();
+      codeReader.decodeFromVideoElement(video, (result, err) => {
+        if (result && !isProcessing) {
+          let text = result.getText().trim();
+          for (let p of platformPatterns) {
+            let m = text.match(p.regex);
+            if (m) {
+              addOrderId(m[0], p.name);
+              pauseScanning();
+              return;
+            }
+          }
+          // বারকোডে সরাসরি আইডি থাকলে
+          if (text.startsWith("OD") || text.includes("-") || text.includes("_")) {
+            addOrderId(text, "Barcode");
+            pauseScanning();
+          }
+        }
+      });
+
+      // OCR ইঞ্জিন লোড
+      tesseractWorker = await Tesseract.createWorker('eng');
+
+      // প্রতি ১ সেকেন্ডে বক্সের ভেতরের লেখা চেক করবে
+      setInterval(scanFrameOCR, 1000);
+    }
+
+    function pauseScanning() {
+      isProcessing = true;
+      setTimeout(() => { isProcessing = false; }, 2000);
+    }
+
+    async function scanFrameOCR() {
+      if (isProcessing || !video.videoWidth || !tesseractWorker) return;
+
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      const cropW = w * 0.9;
+      const cropH = h * 0.35;
+
       canvas.width = cropW;
       canvas.height = cropH;
-
+      const ctx = canvas.getContext('2d');
       ctx.drawImage(video, (w - cropW) / 2, (h - cropH) / 2, cropW, cropH, 0, 0, cropW, cropH);
 
       try {
-        const worker = await Tesseract.createWorker('eng');
-        const ret = await worker.recognize(canvas);
-        await worker.terminate();
+        const ret = await tesseractWorker.recognize(canvas);
+        const text = ret.data.text.replace(/\s+/g, ' ').trim();
 
-        const cleanText = ret.data.text.replace(/\s+/g, ' ').trim();
-        let detectedId = null;
-
-        for (let reg of patterns) {
-          const m = cleanText.match(reg);
-          if (m) { detectedId = m[0].toUpperCase(); break; }
-        }
-
-        if (detectedId) {
-          if (!scannedData.some(d => d.id === detectedId)) {
-            const now = new Date();
-            scannedData.push({ id: detectedId, time: now.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}), date: now.toISOString().slice(0, 10) });
-            updateUI();
-            statusBox.innerHTML = `✅ সেভ হয়েছে: <b>${detectedId}</b>`;
-          } else {
-            statusBox.innerHTML = `⚠️ এটি আগেই স্ক্যান করা হয়েছে: <b>${detectedId}</b>`;
+        for (let p of platformPatterns) {
+          const match = text.match(p.regex);
+          if (match) {
+            addOrderId(match[0], p.name);
+            pauseScanning();
+            break;
           }
-        } else {
-          statusBox.innerHTML = `❌ আইডি পাওয়া যায়নি। বক্সে ঠিকভাবে ধরে স্ক্যান করুন।`;
         }
-      } catch (e) {
-        statusBox.innerText = "সমস্যা হয়েছে, আবার চেষ্টা করুন।";
-      } finally {
-        scanBtn.disabled = false;
-        scanBtn.innerText = "📷 স্ক্যান করুন";
-      }
+      } catch(e) {}
     }
 
     function exportExcel() {
       if (!scannedData.length) return alert("কোনো ডাটা নেই!");
-      let csv = "Serial,Order ID,Date,Time\n";
-      scannedData.forEach((row, i) => csv += `${i + 1},"${row.id}",${row.date},${row.time}\n`);
+      let csv = "Serial,Platform,Order ID,Date,Time\n";
+      scannedData.forEach((r, i) => csv += `${i + 1},"${r.platform}","${r.id}",${r.date},${r.time}\n`);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
@@ -143,9 +204,11 @@
       if (confirm("সব ক্লিয়ার করবেন?")) {
         scannedData = [];
         updateUI();
+        statusBox.innerText = "তালিকা খালি করা হয়েছে।";
       }
     }
-    updateUI();
+
+    window.onload = init;
   </script>
 </body>
 </html>
