@@ -3,32 +3,50 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bulk Shipping Labels Extractor</title>
+  <title>Bulk Shipping & Return Order Manager</title>
   <!-- PDF.js Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-    .container { width: 100%; max-width: 980px; background: #1e293b; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    .container { width: 100%; max-width: 1000px; background: #1e293b; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
     h1 { font-size: 20px; color: #38bdf8; text-align: center; margin-bottom: 6px; }
     p.subtitle { font-size: 13px; color: #94a3b8; text-align: center; margin-bottom: 20px; }
-    .upload-box { border: 2px dashed #38bdf8; border-radius: 8px; padding: 25px 15px; text-align: center; cursor: pointer; background: rgba(56, 189, 248, 0.05); }
-    .upload-box:hover { background: rgba(56, 189, 248, 0.1); }
+    
+    .grid-sections { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    @media (max-width: 700px) { .grid-sections { grid-template-columns: 1fr; } }
+
+    .card { background: #0f172a; border-radius: 8px; padding: 15px; border: 1px solid #334155; }
+    .card-title { font-size: 14px; font-weight: bold; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+    .card-dispatch { border-color: #38bdf8; }
+    .card-return { border-color: #f59e0b; }
+
+    .upload-box { border: 2px dashed #475569; border-radius: 6px; padding: 15px; text-align: center; cursor: pointer; background: rgba(255,255,255,0.02); display: block; }
+    .upload-box:hover { border-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }
     input[type="file"] { display: none; }
-    .upload-icon { font-size: 38px; margin-bottom: 8px; }
+
+    .return-input-group { display: flex; gap: 8px; margin-top: 10px; }
+    .return-input-group input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; background: #1e293b; color: white; font-family: monospace; font-size: 13px; }
+    .return-input-group button { padding: 8px 14px; border-radius: 6px; border: none; background: #f59e0b; color: #000; font-weight: bold; cursor: pointer; }
+
     .status-bar { margin-top: 15px; font-size: 14px; text-align: center; font-weight: bold; color: #38bdf8; min-height: 20px; }
-    .controls { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
-    button { padding: 10px 14px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
+    .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+    button.action-btn { padding: 10px 14px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
     .btn-export { background: #10b981; color: white; display: none; flex: 2; }
-    .btn-remove-dup { background: #f59e0b; color: white; display: none; flex: 1.5; }
+    .btn-remove-dup { background: #64748b; color: white; display: none; flex: 1.5; }
     .btn-clear { background: #ef4444; color: white; display: none; width: 45px; }
+
     .results { margin-top: 20px; max-height: 450px; overflow-y: auto; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
     th, td { padding: 10px 8px; border-bottom: 1px solid #334155; }
     th { background: #1e293b; color: #94a3b8; position: sticky; top: 0; }
     td { font-family: monospace; }
+    
     .badge-unique { background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; }
     .badge-duplicate { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; }
+    .badge-returned { background: #f59e0b; color: #000; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; animation: pulse 1.5s infinite; }
+    .row-returned { background: rgba(245, 158, 11, 0.12) !important; border-left: 4px solid #f59e0b; }
+
     .btn-del-row { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 14px; padding: 2px 6px; }
     .btn-del-row:hover { background: rgba(239, 68, 68, 0.2); border-radius: 4px; }
   </style>
@@ -36,22 +54,49 @@
 <body>
 
   <div class="container">
-    <h1>📄 Bulk Shipping Labels Extractor</h1>
-    <p class="subtitle">Flipkart, Amazon ও Meesho-র শিপিং লেবেল থেকে এক্সেল ও উন্নত ডুপ্লিকেট ম্যানেজার</p>
+    <h1>📄 Dispatch & Return Order Manager</h1>
+    <p class="subtitle">শিপিং লেবেল থেকে এক্সেল তৈরি এবং রিটার্ন পার্সেল ট্র্যাকিং সিস্টেম</p>
 
-    <label class="upload-box" for="pdfInput">
-      <div class="upload-icon">📑</div>
-      <div style="font-size: 15px; font-weight: bold;">PDF ফাইল বেছে নিন (একাধিক ফাইল একসাথে দিতে পারেন)</div>
-      <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">একটি আপলোড করার পর আরেকটি দিলেও আগের ডেটা থাকবে</div>
-      <input type="file" id="pdfInput" accept="application/pdf" multiple onchange="processMultiplePDFs(this)">
-    </label>
+    <div class="grid-sections">
+      <!-- পাঠানো অর্ডারের সেকশন -->
+      <div class="card card-dispatch">
+        <div class="card-title" style="color: #38bdf8;">📦 ডিসপ্যাচ অর্ডার (পাঠানো পার্সেল)</div>
+        <label class="upload-box" for="pdfInput">
+          <div style="font-size: 24px;">📑</div>
+          <div style="font-size: 13px; font-weight: bold; margin-top: 4px;">শিপিং লেবেল PDF বেছে নিন</div>
+          <div style="font-size: 11px; color: #94a3b8;">(Flipkart, Amazon, Meesho একাধিক PDF)</div>
+          <input type="file" id="pdfInput" accept="application/pdf" multiple onchange="processMultiplePDFs(this)">
+        </label>
+        <div style="margin-top: 8px; text-align: center;">
+          <label style="font-size: 11px; color: #38bdf8; text-decoration: underline; cursor: pointer;">
+            আগের দিনের সেভ করা CSV থাকলে আপলোড করুন
+            <input type="file" accept=".csv" onchange="importExistingCSV(this)">
+          </label>
+        </div>
+      </div>
+
+      <!-- রিটার্ন অর্ডারের সেকশন -->
+      <div class="card card-return">
+        <div class="card-title" style="color: #f59e0b;">🔄 রিটার্ন পার্সেল এন্ট্রি</div>
+        <label class="upload-box" for="returnPdfInput" style="border-color: #f59e0b; background: rgba(245, 158, 11, 0.04);">
+          <div style="font-size: 24px;">📥</div>
+          <div style="font-size: 13px; font-weight: bold; margin-top: 4px;">রিটার্ন লেবেল PDF আপলোড করুন</div>
+          <div style="font-size: 11px; color: #f59e0b;">(রিটার্ন স্লিপের PDF থাকলে)</div>
+          <input type="file" id="returnPdfInput" accept="application/pdf" multiple onchange="processReturnPDFs(this)">
+        </label>
+        <div class="return-input-group">
+          <input type="text" id="manualReturnId" placeholder="রিটার্ন Order বা Tracking ID লিখুন...">
+          <button onclick="handleManualReturn()">রিটার্ন মার্ক করুন</button>
+        </div>
+      </div>
+    </div>
 
     <div class="status-bar" id="statusBox"></div>
 
     <div class="controls">
-      <button class="btn-export" id="exportBtn" onclick="exportToCSV()">📥 Excel (CSV) ডাউনলোড</button>
-      <button class="btn-remove-dup" id="removeDupBtn" onclick="removeOnlyDuplicates()">🧹 শুধু ডুপ্লিকেটগুলো মুছুন</button>
-      <button class="btn-clear" id="clearBtn" onclick="clearData()" title="সব একসাথে মুছুন">🗑️</button>
+      <button class="action-btn btn-export" id="exportBtn" onclick="exportToCSV()">📥 সব অর্ডারের Excel (CSV) ডাউনলোড</button>
+      <button class="action-btn btn-remove-dup" id="removeDupBtn" onclick="removeOnlyDuplicates()">🧹 ডুপ্লিকেট মুছুন</button>
+      <button class="action-btn btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️</button>
     </div>
 
     <div class="results" id="resultsBox" style="display:none;">
@@ -82,83 +127,55 @@
     const meeshoOrderRegex   = /\b\d{16,20}_\d+\b/;
 
     function detectCourier(text, trackingId, platform) {
+      if (platform === "Amazon" || /ATSPL|ATS|Amazon\s*Shipping/i.test(text)) return "Amazon Shipping (ATS)";
       if (/Delhivery/i.test(text)) return "Delhivery";
       if (/Xpressbees|Xpress\s*bees|\bXB\b/i.test(text)) return "Xpressbees";
       if (/Shadowfax|\bSF\b/i.test(text)) return "Shadowfax";
       if (/Ekart|eKart/i.test(text)) return "Ekart";
       if (/Ecom\s*Express/i.test(text)) return "Ecom Express";
-      if (/Amazon\s*Shipping|ATS|Amazon\s*Transportation/i.test(text) || platform === "Amazon") return "Amazon Shipping";
 
-      if (trackingId.startsWith("1340") || (trackingId.startsWith("14") && trackingId.length >= 14)) {
-        return "Xpressbees";
-      }
-      if (trackingId.startsWith("SF") || trackingId.startsWith("sf")) {
-        return "Shadowfax";
-      }
-      if (trackingId.startsWith("FMPC") || trackingId.startsWith("FMPP")) {
-        return "Ekart";
-      }
-      if (/^(12|13|14|33)\d{10,12}$/.test(trackingId)) {
-        return "Delhivery";
-      }
+      if (trackingId.startsWith("1340") || (trackingId.startsWith("14") && trackingId.length >= 14)) return "Xpressbees";
+      if (trackingId.startsWith("SF") || trackingId.startsWith("sf")) return "Shadowfax";
+      if (trackingId.startsWith("FMPC") || trackingId.startsWith("FMPP")) return "Ekart";
+      if (/^(12|13|14|33)\d{10,12}$/.test(trackingId)) return "Delhivery";
 
       return "অন্যান্য";
     }
 
     function findTrackingNumber(text, rawOrderId, platform) {
       const pureOrderId = rawOrderId.replace(/_\d+$/, '');
+
+      const amzAwbDirect = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
+      if (amzAwbDirect && amzAwbDirect[1]) return amzAwbDirect[1].trim();
+
       const cleanedSpacedText = text.replace(/(\d)\s+(\d)\s+(\d)\s+(\d)/g, '$1$2$3$4');
 
-      // ১. Amazon এর নির্দিষ্ট ট্র্যাকিং ফরম্যাট (Tracking ID / AWB / TBA / IN...)
-      if (platform === "Amazon") {
-        const amzPrefix = cleanedSpacedText.match(/(?:Tracking\s*(?:ID|#|No)|AWB(?:\s*No)?|TRK#)[:\s#-]*([A-Z0-9]{9,22})/i);
-        if (amzPrefix && amzPrefix[1] && amzPrefix[1] !== pureOrderId) {
-          return amzPrefix[1].trim();
-        }
-        const amzSpecific = cleanedSpacedText.match(/\b(IN[0-9]{8,14}|TBA[0-9]{9,15})\b/i);
-        if (amzSpecific && amzSpecific[0]) {
-          return amzSpecific[0].trim();
-        }
-      }
-
-      // ২. সাধারণ AWB / Waybill / Tracking ট্যাগ
       const prefixMatch = cleanedSpacedText.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{10,22})/i);
-      if (prefixMatch && prefixMatch[1] && !prefixMatch[1].includes(pureOrderId)) {
-        return prefixMatch[1].trim();
-      }
+      if (prefixMatch && prefixMatch[1] && !prefixMatch[1].includes(pureOrderId)) return prefixMatch[1].trim();
 
-      // ৩. নির্দিষ্ট কুরিয়ার কোড (FMPC, FMPP, Shadowfax SF)
-      const specialMatch = cleanedSpacedText.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+|SF\d{9,16})\b/i);
-      if (specialMatch && specialMatch[0]) {
-        return specialMatch[0].trim();
-      }
+      const specialMatch = cleanedSpacedText.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+|SF\d{9,16}|IN\d{8,14}|TBA\d{9,15})\b/i);
+      if (specialMatch && specialMatch[0]) return specialMatch[0].trim();
 
-      // ৪. ১২ থেকে ১৬ ডিজিটের নম্বর খোঁজা
       const allNumbers = cleanedSpacedText.match(/\b\d{12,16}\b/g) || [];
       for (let num of allNumbers) {
         let clean = num.trim();
-        if (clean !== pureOrderId && !clean.startsWith("2026") && !clean.startsWith("2025") && !clean.startsWith("19")) {
-          return clean;
-        }
+        if (clean !== pureOrderId && !clean.startsWith("2026") && !clean.startsWith("2025") && !clean.startsWith("19")) return clean;
       }
 
-      // ৫. ১০-১১ ডিজিটের নম্বর
       const tenDigitNumbers = cleanedSpacedText.match(/\b\d{10,11}\b/g) || [];
       for (let num of tenDigitNumbers) {
         let clean = num.trim();
-        if (clean !== pureOrderId && !clean.startsWith("91") && !clean.startsWith("202")) {
-          return clean;
-        }
+        if (clean !== pureOrderId && !clean.startsWith("91") && !clean.startsWith("202")) return clean;
       }
 
       return "নেই";
     }
 
-    // পুরো তালিকার স্ট্যাটাস নতুন করে হিসাব করা
     function refreshDuplicateStatus() {
       const seen = new Set();
       let dupCount = 0;
       extractedData.forEach(item => {
+        if (item.status === "Returned") return; // রিটার্ন স্ট্যাটাস অপরিবর্তিত থাকবে
         if (seen.has(item.orderId)) {
           item.status = "Duplicate";
           dupCount++;
@@ -229,18 +246,110 @@
       input.value = '';
     }
 
-    // শুধু ডুপ্লিকেট এন্ট্রিগুলো মুছে ফেলা
-    function removeOnlyDuplicates() {
-      const initialCount = extractedData.length;
-      extractedData = extractedData.filter(item => item.status === "Unique");
-      const removedCount = initialCount - extractedData.length;
-      
-      refreshDuplicateStatus();
-      updateUI(0);
-      document.getElementById('statusBox').innerHTML = `🧹 <b>${removedCount}</b> টি ডুপ্লিকেট এন্ট্রি মুছে দেওয়া হয়েছে!`;
+    // রিটার্ন আইডি ম্যানুয়ালি এন্ট্রি করা
+    function handleManualReturn() {
+      const input = document.getElementById('manualReturnId');
+      const val = input.value.trim();
+      if (!val) return;
+
+      markAsReturned(val);
+      input.value = '';
     }
 
-    // নির্দিষ্ট কোনো এন্ট্রি ডিলিট করা
+    // রিটার্ন হিসেবে চিহ্নিত করার লজিক
+    function markAsReturned(searchKey) {
+      let found = false;
+      extractedData.forEach(item => {
+        if (item.orderId.toLowerCase() === searchKey.toLowerCase() || 
+           (item.trackingId !== "নেই" && item.trackingId.toLowerCase() === searchKey.toLowerCase())) {
+          item.status = "Returned";
+          found = true;
+        }
+      });
+
+      if (!found) {
+        // যদি পাঠানো তালিকায় আগে থেকে না থাকে
+        extractedData.unshift({
+          platform: "শনাক্তহীন",
+          courier: "শনাক্তহীন",
+          orderId: searchKey,
+          trackingId: "নেই",
+          status: "Returned"
+        });
+      }
+
+      updateUI(refreshDuplicateStatus());
+      document.getElementById('statusBox').innerHTML = `⚠️ <b>${searchKey}</b> রিটার্ন হিসেবে চিহ্নিত করা হয়েছে!`;
+    }
+
+    // রিটার্ন স্লিপ PDF প্রসেস করা
+    async function processReturnPDFs(input) {
+      const files = input.files;
+      if (!files || files.length === 0) return;
+
+      for (let file of files) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str.trim()).join(' ');
+
+            let orderId = "";
+            if (flipkartOrderRegex.test(pageText)) orderId = pageText.match(flipkartOrderRegex)[0];
+            else if (amazonOrderRegex.test(pageText)) orderId = pageText.match(amazonOrderRegex)[0];
+            else if (meeshoOrderRegex.test(pageText)) orderId = pageText.match(meeshoOrderRegex)[0];
+
+            let trackingId = findTrackingNumber(pageText, orderId || "0", "অন্যান্য");
+
+            if (orderId) markAsReturned(orderId);
+            else if (trackingId !== "নেই") markAsReturned(trackingId);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      input.value = '';
+    }
+
+    // আগের দিনের CSV শিট আপলোড
+    function importExistingCSV(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const lines = e.target.result.split('\n');
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          const cols = line.split(',').map(s => s.replace(/^"|"$/g, ''));
+          if (cols.length >= 6) {
+            extractedData.push({
+              status: cols[1],
+              platform: cols[2],
+              courier: cols[3],
+              orderId: cols[4],
+              trackingId: cols[5]
+            });
+          }
+        }
+        updateUI(refreshDuplicateStatus());
+        document.getElementById('statusBox').innerHTML = `📥 পূর্বের CSV থেকে ডেটা লোড হয়েছে!`;
+      };
+      reader.readAsText(file);
+      input.value = '';
+    }
+
+    function removeOnlyDuplicates() {
+      const initialCount = extractedData.length;
+      extractedData = extractedData.filter(item => item.status !== "Duplicate");
+      const removedCount = initialCount - extractedData.length;
+      refreshDuplicateStatus();
+      updateUI(0);
+      document.getElementById('statusBox').innerHTML = `🧹 <b>${removedCount}</b> টি ডুপ্লিকেট মুছে ফেলা হয়েছে!`;
+    }
+
     function deleteSingleRow(index) {
       extractedData.splice(index, 1);
       const dupCount = refreshDuplicateStatus();
@@ -249,10 +358,10 @@
 
     function updateUI(duplicateCount) {
       const statusBox = document.getElementById('statusBox');
+      let returnCount = extractedData.filter(d => d.status === "Returned").length;
       let summaryText = `✅ মোট আছে: <b>${extractedData.length}</b> টি অর্ডার।`;
-      if (duplicateCount > 0) {
-        summaryText += ` (⚠️ ডুপ্লিকেট: <b>${duplicateCount}</b> টি)`;
-      }
+      if (returnCount > 0) summaryText += ` (⚠️ রিটার্ন: <b style="color:#f59e0b;">${returnCount}</b> টি)`;
+      if (duplicateCount > 0) summaryText += ` (⚠️ ডুপ্লিকেট: <b>${duplicateCount}</b> টি)`;
       statusBox.innerHTML = summaryText;
       renderTable();
     }
@@ -260,14 +369,23 @@
     function renderTable() {
       const tableBody = document.getElementById('tableBody');
       tableBody.innerHTML = '';
-
       let hasDuplicates = false;
 
       extractedData.forEach((row, i) => {
         if (row.status === 'Duplicate') hasDuplicates = true;
         const tr = document.createElement('tr');
-        const badgeClass = row.status === 'Duplicate' ? 'badge-duplicate' : 'badge-unique';
-        const badgeText = row.status === 'Duplicate' ? 'ডুপ্লিকেট' : 'নতুন';
+        
+        let badgeClass = 'badge-unique';
+        let badgeText = 'ডেলিভারি/প্রসেসিং';
+
+        if (row.status === 'Duplicate') {
+          badgeClass = 'badge-duplicate';
+          badgeText = 'ডুপ্লিকেট';
+        } else if (row.status === 'Returned') {
+          badgeClass = 'badge-returned';
+          badgeText = '⚠️ রিটার্ন এসেছে';
+          tr.className = 'row-returned';
+        }
 
         tr.innerHTML = `
           <td>${i + 1}</td>
@@ -277,7 +395,7 @@
           <td>${row.orderId}</td>
           <td style="color:${row.trackingId === 'নেই' ? '#f87171' : '#34d399'}; font-weight:bold;">${row.trackingId}</td>
           <td style="text-align:center;">
-            <button class="btn-del-row" onclick="deleteSingleRow(${i})" title="শুধু এটি মুছুন">❌</button>
+            <button class="btn-del-row" onclick="deleteSingleRow(${i})" title="মুছুন">❌</button>
           </td>
         `;
         tableBody.appendChild(tr);
@@ -299,7 +417,7 @@
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `Orders_List_${new Date().toISOString().slice(0,10)}.csv`;
+      link.download = `Orders_Report_${new Date().toISOString().slice(0,10)}.csv`;
       link.click();
     }
 
