@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bulk Shipping & Return Order Manager</title>
-  <!-- PDF.js & ZXing Barcode Library -->
+  <!-- PDF.js & ZXing Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
@@ -80,7 +80,7 @@
         <label class="upload-box" for="returnPdfInput" style="border-color: #f59e0b; background: rgba(245, 158, 11, 0.04);">
           <div style="font-size: 24px;">📥</div>
           <div style="font-size: 13px; font-weight: bold; margin-top: 4px;">রিটার্ন স্লিপের PDF দিন</div>
-          <div style="font-size: 11px; color: #f59e0b;">(রিটার্ন স্লিপ ফাইল থাকলে)</div>
+          <div style="font-size: 11px; color: #f59e0b;">(Amazon বা অন্য প্ল্যাটফর্মের রিটার্ন ফাইল)</div>
           <input type="file" id="returnPdfInput" accept="application/pdf" multiple onchange="processReturnPDFs(this)">
         </label>
         <div class="return-input-group">
@@ -118,12 +118,17 @@
   </div>
 
   <canvas id="hiddenCanvas" style="display:none;"></canvas>
+  <canvas id="cropCanvas" style="display:none;"></canvas>
 
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
     let extractedData = [];
-    const codeReader = new ZXing.BrowserMultiFormatReader();
+
+    // ZXing বারকোড রিডার
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    const codeReader = new ZXing.BrowserMultiFormatReader(hints);
 
     const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
@@ -135,8 +140,8 @@
       return new Date().toISOString().slice(0,10);
     }
 
-    // ইমেজ পেজ থেকে সরাসরি বারকোড স্ক্যান
-    async function scanBarcodeFromPage(page) {
+    // Amazon লেবেলের উপরের বারকোডটি আলাদা ক্রপ করে রিড করার ফাংশন
+    async function scanAmazonBarcodeFromPage(page) {
       try {
         const viewport = page.getViewport({ scale: 2.0 });
         const canvas = document.getElementById('hiddenCanvas');
@@ -145,11 +150,28 @@
         canvas.width = viewport.width;
 
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-        const result = await codeReader.decodeFromCanvas(canvas);
-        if (result && result.text) {
-          return result.text.trim();
-        }
-      } catch (e) {}
+
+        // ১. শুধু উপরের বামদিকের বারকোড অংশটুকু ক্রপ (নিচের QR কোড এড়িয়ে)
+        const cropCanvas = document.getElementById('cropCanvas');
+        cropCanvas.width = canvas.width * 0.70;
+        cropCanvas.height = canvas.height * 0.35;
+        const cropCtx = cropCanvas.getContext('2d');
+        cropCtx.drawImage(canvas, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
+
+        try {
+          const res1 = await codeReader.decodeFromCanvas(cropCanvas);
+          if (res1 && res1.text) return res1.text.trim();
+        } catch(e) {}
+
+        // ২. ব্যাকআপ হিসেবে পুরো পেজ স্ক্যান
+        try {
+          const res2 = await codeReader.decodeFromCanvas(canvas);
+          if (res2 && res2.text) return res2.text.trim();
+        } catch(e) {}
+
+      } catch (err) {
+        console.error("Barcode decode error:", err);
+      }
       return null;
     }
 
@@ -226,19 +248,19 @@
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           const totalPages = pdf.numPages;
 
-          let lastScannedBarcode = "";
+          let pendingBarcode = "";
 
           for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-            statusBox.innerHTML = `⏳ পাতা প্রসেস হচ্ছে: ${pageNum} / ${totalPages}`;
+            statusBox.innerHTML = `⏳ স্ক্যান হচ্ছে: পাতা ${pageNum} / ${totalPages}`;
             const page = await pdf.getPage(pageNum);
             const textContent = await page.getTextContent();
             const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
             const pageText = items.join(' ');
 
             // ইমেজ পেজ হলে বারকোড স্ক্যান
-            let barcodeFromImage = await scanBarcodeFromPage(page);
-            if (barcodeFromImage) {
-              lastScannedBarcode = barcodeFromImage;
+            let scannedBarcode = await scanAmazonBarcodeFromPage(page);
+            if (scannedBarcode) {
+              pendingBarcode = scannedBarcode;
             }
 
             let platform = "অন্যান্য";
@@ -258,9 +280,8 @@
             if (orderId) {
               let trackingId = findTrackingNumber(pageText, orderId, platform);
               
-              // টেক্সটে না থাকলে বারকোড স্ক্যানারের মান ব্যবহার করা
-              if (trackingId === "নেই" && lastScannedBarcode) {
-                trackingId = lastScannedBarcode;
+              if (trackingId === "নেই" && pendingBarcode) {
+                trackingId = pendingBarcode;
               }
 
               let courier = detectCourier(pageText, trackingId, platform);
@@ -275,7 +296,7 @@
                 status: "Unique"
               });
 
-              lastScannedBarcode = "";
+              pendingBarcode = "";
             }
           }
         } catch (err) {
@@ -292,11 +313,12 @@
       const input = document.getElementById('manualReturnId');
       const val = input.value.trim();
       if (!val) return;
-      markAsReturned(val);
+      markAsReturned(val, "অন্যান্য");
       input.value = '';
     }
 
-    function markAsReturned(searchKey) {
+    // রিটার্ন চিহ্নিত করা (প্ল্যাটফর্ম শনাক্তকরণসহ)
+    function markAsReturned(searchKey, detectedPlatform) {
       let found = false;
       extractedData.forEach(item => {
         if (item.orderId.toLowerCase() === searchKey.toLowerCase() || 
@@ -307,10 +329,25 @@
       });
 
       if (!found) {
+        // অর্ডারের ফরম্যাট অনুযায়ী প্ল্যাটফর্ম ও কুরিয়ার নির্ধারণ
+        let pForm = detectedPlatform || "অন্যান্য";
+        let cName = "অন্যান্য";
+
+        if (amazonOrderRegex.test(searchKey) || pForm === "Amazon") {
+          pForm = "Amazon";
+          cName = "Amazon Shipping (ATS)";
+        } else if (flipkartOrderRegex.test(searchKey) || pForm === "Flipkart") {
+          pForm = "Flipkart";
+          cName = "Ekart";
+        } else if (meeshoOrderRegex.test(searchKey) || pForm === "Meesho") {
+          pForm = "Meesho";
+          cName = "Delhivery / Xpressbees";
+        }
+
         extractedData.unshift({
           date: new Date().toISOString().slice(0,10),
-          platform: "শনাক্তহীন",
-          courier: "শনাক্তহীন",
+          platform: pForm,
+          courier: cName,
           orderId: searchKey,
           trackingId: "নেই",
           status: "Returned"
@@ -321,6 +358,7 @@
       document.getElementById('statusBox').innerHTML = `⚠️ <b>${searchKey}</b> রিটার্ন হিসেবে চিহ্নিত হয়েছে!`;
     }
 
+    // রিটার্ন PDF প্রসেস
     async function processReturnPDFs(input) {
       const files = input.files;
       if (!files || files.length === 0) return;
@@ -334,18 +372,31 @@
             const textContent = await page.getTextContent();
             const pageText = textContent.items.map(item => item.str.trim()).join(' ');
 
+            let pForm = "অন্যান্য";
             let orderId = "";
-            if (flipkartOrderRegex.test(pageText)) orderId = pageText.match(flipkartOrderRegex)[0];
-            else if (amazonOrderRegex.test(pageText)) orderId = pageText.match(amazonOrderRegex)[0];
-            else if (meeshoOrderRegex.test(pageText)) orderId = pageText.match(meeshoOrderRegex)[0];
+            if (amazonOrderRegex.test(pageText)) {
+              pForm = "Amazon";
+              orderId = pageText.match(amazonOrderRegex)[0];
+            } else if (flipkartOrderRegex.test(pageText)) {
+              pForm = "Flipkart";
+              orderId = pageText.match(flipkartOrderRegex)[0];
+            } else if (meeshoOrderRegex.test(pageText)) {
+              pForm = "Meesho";
+              orderId = pageText.match(meeshoOrderRegex)[0];
+            }
 
-            let barcode = await scanBarcodeFromPage(page);
-            let trackingId = barcode || findTrackingNumber(pageText, orderId || "0", "অন্যান্য");
+            let barcode = await scanAmazonBarcodeFromPage(page);
+            let trackingId = barcode || findTrackingNumber(pageText, orderId || "0", pForm);
 
-            if (orderId) markAsReturned(orderId);
-            else if (trackingId !== "নেই") markAsReturned(trackingId);
+            if (orderId) {
+              markAsReturned(orderId, pForm);
+            } else if (trackingId !== "নেই") {
+              markAsReturned(trackingId, pForm);
+            }
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error(e);
+        }
       }
       input.value = '';
     }
@@ -372,7 +423,7 @@
           }
         }
         updateUI(refreshDuplicateStatus());
-        document.getElementById('statusBox').innerHTML = `📥 পূর্বের CSV সফলভাবে যোগ হয়েছে!`;
+        document.getElementById('statusBox').innerHTML = `📥 পূর্বের CSV সফলভাবে লোড হয়েছে!`;
       };
       reader.readAsText(file);
       input.value = '';
