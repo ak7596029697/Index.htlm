@@ -4,8 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bulk Shipping & Return Order Manager</title>
-  <!-- শুধু হালকা ও দ্রুতগতির PDF.js লাইব্রেরি -->
+  <!-- PDF.js & Tesseract OCR Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
@@ -119,10 +120,21 @@
     </div>
   </div>
 
+  <canvas id="hiddenCanvas" style="display:none;"></canvas>
+  <canvas id="cropCanvas" style="display:none;"></canvas>
+
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
     let extractedData = [];
+    let ocrWorker = null;
+
+    async function initOCR() {
+      if (!ocrWorker) {
+        ocrWorker = await Tesseract.createWorker('eng');
+      }
+      return ocrWorker;
+    }
 
     const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
@@ -134,7 +146,6 @@
       return new Date().toISOString().slice(0,10);
     }
 
-    // ট্র্যাকিং সাইটের লাইভ লিংক তৈরি
     function getTrackingUrl(courier, trackingId) {
       if (!trackingId || trackingId === "নেই") return null;
       const cleanAwb = encodeURIComponent(trackingId.trim());
@@ -153,6 +164,36 @@
         return `https://ecomexpress.in/tracking/?awb_number=${cleanAwb}`;
       }
       return `https://www.google.com/search?q=${cleanAwb}+tracking`;
+    }
+
+    async function extractAmazonAWBFromImage(page) {
+      try {
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.getElementById('hiddenCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+        const cropCanvas = document.getElementById('cropCanvas');
+        cropCanvas.width = canvas.width * 0.55;
+        cropCanvas.height = canvas.height * 0.22;
+        const cropCtx = cropCanvas.getContext('2d');
+        cropCtx.drawImage(canvas, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
+
+        const worker = await initOCR();
+        const ret = await worker.recognize(cropCanvas);
+        const ocrText = ret.data.text;
+
+        const match = ocrText.match(/AWB\s*([0-9]{10,14})/i) || ocrText.match(/\b(37[0-9]{10})\b/);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
+      } catch (err) {
+        console.error("OCR Error:", err);
+      }
+      return null;
     }
 
     function detectCourier(text, trackingId, platform) {
@@ -176,7 +217,6 @@
     function findTrackingNumber(text, rawOrderId, platform) {
       const pureOrderId = rawOrderId.replace(/_\d+$/, '');
 
-      // Amazon-এর AWB নম্বর সরাসরি পড়া
       const amzAwbDirect = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
       if (amzAwbDirect && amzAwbDirect[1]) return amzAwbDirect[1].trim();
 
@@ -235,12 +275,19 @@
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           const totalPages = pdf.numPages;
 
+          let pendingAmazonAWB = "";
+
           for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-            statusBox.innerHTML = `⏳ পাতা প্রসেস হচ্ছে: ${pageNum} / ${totalPages}`;
+            statusBox.innerHTML = `⏳ প্রসেস হচ্ছে: পাতা ${pageNum} / ${totalPages}`;
             const page = await pdf.getPage(pageNum);
             const textContent = await page.getTextContent();
             const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
             const pageText = items.join(' ');
+
+            if (items.length === 0 || pageText.includes("AWB") || pageText.length < 50) {
+              let awb = await extractAmazonAWBFromImage(page);
+              if (awb) pendingAmazonAWB = awb;
+            }
 
             let platform = "অন্যান্য";
             let orderId = "";
@@ -258,6 +305,11 @@
 
             if (orderId) {
               let trackingId = findTrackingNumber(pageText, orderId, platform);
+              
+              if ((trackingId === "নেই" || platform === "Amazon") && pendingAmazonAWB) {
+                trackingId = pendingAmazonAWB;
+              }
+
               let courier = detectCourier(pageText, trackingId, platform);
               let orderDate = extractDate(pageText);
 
@@ -269,6 +321,8 @@
                 trackingId: trackingId,
                 status: "Unique"
               });
+
+              pendingAmazonAWB = "";
             }
           }
         } catch (err) {
@@ -285,11 +339,11 @@
       const input = document.getElementById('manualReturnId');
       const val = input.value.trim();
       if (!val) return;
-      markAsReturned(val);
+      markAsReturned(val, "অন্যান্য");
       input.value = '';
     }
 
-    function markAsReturned(searchKey) {
+    function markAsReturned(searchKey, detectedPlatform) {
       let found = false;
       extractedData.forEach(item => {
         if (item.orderId.toLowerCase() === searchKey.toLowerCase() || 
@@ -300,16 +354,16 @@
       });
 
       if (!found) {
-        let pForm = "অন্যান্য";
+        let pForm = detectedPlatform || "অন্যান্য";
         let cName = "অন্যান্য";
 
-        if (amazonOrderRegex.test(searchKey)) {
+        if (amazonOrderRegex.test(searchKey) || pForm === "Amazon") {
           pForm = "Amazon";
           cName = "Amazon Shipping (ATS)";
-        } else if (flipkartOrderRegex.test(searchKey)) {
+        } else if (flipkartOrderRegex.test(searchKey) || pForm === "Flipkart") {
           pForm = "Flipkart";
           cName = "Ekart";
-        } else if (meeshoOrderRegex.test(searchKey)) {
+        } else if (meeshoOrderRegex.test(searchKey) || pForm === "Meesho") {
           pForm = "Meesho";
           cName = "Delhivery / Xpressbees";
         }
@@ -341,17 +395,30 @@
             const textContent = await page.getTextContent();
             const pageText = textContent.items.map(item => item.str.trim()).join(' ');
 
+            let pForm = "অন্যান্য";
             let orderId = "";
-            if (flipkartOrderRegex.test(pageText)) orderId = pageText.match(flipkartOrderRegex)[0];
-            else if (amazonOrderRegex.test(pageText)) orderId = pageText.match(amazonOrderRegex)[0];
-            else if (meeshoOrderRegex.test(pageText)) orderId = pageText.match(meeshoOrderRegex)[0];
+            if (amazonOrderRegex.test(pageText)) {
+              pForm = "Amazon";
+              orderId = pageText.match(amazonOrderRegex)[0];
+            } else if (flipkartOrderRegex.test(pageText)) {
+              pForm = "Flipkart";
+              orderId = pageText.match(flipkartOrderRegex)[0];
+            } else if (meeshoOrderRegex.test(pageText)) {
+              pForm = "Meesho";
+              orderId = pageText.match(meeshoOrderRegex)[0];
+            }
 
-            let trackingId = findTrackingNumber(pageText, orderId || "0", "অন্যান্য");
+            let trackingId = await extractAmazonAWBFromImage(page) || findTrackingNumber(pageText, orderId || "0", pForm);
 
-            if (orderId) markAsReturned(orderId);
-            else if (trackingId !== "নেই") markAsReturned(trackingId);
+            if (orderId) {
+              markAsReturned(orderId, pForm);
+            } else if (trackingId !== "নেই") {
+              markAsReturned(trackingId, pForm);
+            }
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error(e);
+        }
       }
       input.value = '';
     }
@@ -378,7 +445,7 @@
           }
         }
         updateUI(refreshDuplicateStatus());
-        document.getElementById('statusBox').innerHTML = `📥 পূর্বের CSV সফলভাবে যোগ হয়েছে!`;
+        document.getElementById('statusBox').innerHTML = `📥 পূর্বের CSV সফলভাবে লোড হয়েছে!`;
       };
       reader.readAsText(file);
       input.value = '';
@@ -461,7 +528,6 @@
       document.getElementById('removeDupBtn').style.display = (show && hasDuplicates) ? 'block' : 'none';
     }
 
-    // এক্সেলে যাতে নম্বর না কাটে (Scientific notation না হয়)
     function exportToCSV() {
       if (!extractedData.length) return;
       let csv = "Serial,Status,Date,Platform,Courier Partner,Order ID,Tracking ID\n";
