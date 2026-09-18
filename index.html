@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bulk Shipping & Return Order Manager</title>
-  <!-- PDF.js & ZXing Library -->
+  <!-- PDF.js & Tesseract OCR Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
@@ -124,11 +124,15 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
     let extractedData = [];
+    let ocrWorker = null;
 
-    // ZXing বারকোড রিডার
-    const hints = new Map();
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    const codeReader = new ZXing.BrowserMultiFormatReader(hints);
+    // ব্যাকগ্রাউন্ডে OCR রেডি করা
+    async function initOCR() {
+      if (!ocrWorker) {
+        ocrWorker = await Tesseract.createWorker('eng');
+      }
+      return ocrWorker;
+    }
 
     const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
@@ -140,8 +144,8 @@
       return new Date().toISOString().slice(0,10);
     }
 
-    // Amazon লেবেলের উপরের বারকোডটি আলাদা ক্রপ করে রিড করার ফাংশন
-    async function scanAmazonBarcodeFromPage(page) {
+    // অ্যামাজনের ছবির উপরের "AWB XXXXXXXXXXXX" অংশটুকু OCR দিয়ে পড়ার ফাংশন
+    async function extractAmazonAWBFromImage(page) {
       try {
         const viewport = page.getViewport({ scale: 2.0 });
         const canvas = document.getElementById('hiddenCanvas');
@@ -151,26 +155,23 @@
 
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
 
-        // ১. শুধু উপরের বামদিকের বারকোড অংশটুকু ক্রপ (নিচের QR কোড এড়িয়ে)
+        // শুধু বারকোডের নিচের টেক্সট অংশটুকু (AWB 3726...) নিখুঁতভাবে ক্রপ করা
         const cropCanvas = document.getElementById('cropCanvas');
-        cropCanvas.width = canvas.width * 0.70;
-        cropCanvas.height = canvas.height * 0.35;
+        cropCanvas.width = canvas.width * 0.55;
+        cropCanvas.height = canvas.height * 0.22;
         const cropCtx = cropCanvas.getContext('2d');
         cropCtx.drawImage(canvas, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
 
-        try {
-          const res1 = await codeReader.decodeFromCanvas(cropCanvas);
-          if (res1 && res1.text) return res1.text.trim();
-        } catch(e) {}
+        const worker = await initOCR();
+        const ret = await worker.recognize(cropCanvas);
+        const ocrText = ret.data.text;
 
-        // ২. ব্যাকআপ হিসেবে পুরো পেজ স্ক্যান
-        try {
-          const res2 = await codeReader.decodeFromCanvas(canvas);
-          if (res2 && res2.text) return res2.text.trim();
-        } catch(e) {}
-
+        const match = ocrText.match(/AWB\s*([0-9]{10,14})/i) || ocrText.match(/\b(37[0-9]{10})\b/);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
       } catch (err) {
-        console.error("Barcode decode error:", err);
+        console.error("OCR Error:", err);
       }
       return null;
     }
@@ -248,19 +249,19 @@
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           const totalPages = pdf.numPages;
 
-          let pendingBarcode = "";
+          let pendingAmazonAWB = "";
 
           for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-            statusBox.innerHTML = `⏳ স্ক্যান হচ্ছে: পাতা ${pageNum} / ${totalPages}`;
+            statusBox.innerHTML = `⏳ প্রসেস হচ্ছে: পাতা ${pageNum} / ${totalPages}`;
             const page = await pdf.getPage(pageNum);
             const textContent = await page.getTextContent();
             const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
             const pageText = items.join(' ');
 
-            // ইমেজ পেজ হলে বারকোড স্ক্যান
-            let scannedBarcode = await scanAmazonBarcodeFromPage(page);
-            if (scannedBarcode) {
-              pendingBarcode = scannedBarcode;
+            // পেজে কোনো টেক্সট না থাকলে (যেমন Amazon ইমেজ লেবেল) OCR চালানো
+            if (items.length === 0 || pageText.includes("AWB") || pageText.length < 50) {
+              let awb = await extractAmazonAWBFromImage(page);
+              if (awb) pendingAmazonAWB = awb;
             }
 
             let platform = "অন্যান্য";
@@ -280,8 +281,8 @@
             if (orderId) {
               let trackingId = findTrackingNumber(pageText, orderId, platform);
               
-              if (trackingId === "নেই" && pendingBarcode) {
-                trackingId = pendingBarcode;
+              if ((trackingId === "নেই" || platform === "Amazon") && pendingAmazonAWB) {
+                trackingId = pendingAmazonAWB;
               }
 
               let courier = detectCourier(pageText, trackingId, platform);
@@ -296,7 +297,7 @@
                 status: "Unique"
               });
 
-              pendingBarcode = "";
+              pendingAmazonAWB = "";
             }
           }
         } catch (err) {
@@ -317,7 +318,6 @@
       input.value = '';
     }
 
-    // রিটার্ন চিহ্নিত করা (প্ল্যাটফর্ম শনাক্তকরণসহ)
     function markAsReturned(searchKey, detectedPlatform) {
       let found = false;
       extractedData.forEach(item => {
@@ -329,7 +329,6 @@
       });
 
       if (!found) {
-        // অর্ডারের ফরম্যাট অনুযায়ী প্ল্যাটফর্ম ও কুরিয়ার নির্ধারণ
         let pForm = detectedPlatform || "অন্যান্য";
         let cName = "অন্যান্য";
 
@@ -358,7 +357,6 @@
       document.getElementById('statusBox').innerHTML = `⚠️ <b>${searchKey}</b> রিটার্ন হিসেবে চিহ্নিত হয়েছে!`;
     }
 
-    // রিটার্ন PDF প্রসেস
     async function processReturnPDFs(input) {
       const files = input.files;
       if (!files || files.length === 0) return;
@@ -385,8 +383,7 @@
               orderId = pageText.match(meeshoOrderRegex)[0];
             }
 
-            let barcode = await scanAmazonBarcodeFromPage(page);
-            let trackingId = barcode || findTrackingNumber(pageText, orderId || "0", pForm);
+            let trackingId = await extractAmazonAWBFromImage(page) || findTrackingNumber(pageText, orderId || "0", pForm);
 
             if (orderId) {
               markAsReturned(orderId, pForm);
