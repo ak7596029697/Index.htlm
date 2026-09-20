@@ -194,72 +194,63 @@
       return null;
     }
 
+    // কুরিয়ার পার্টনার নির্ভুলভাবে শনাক্তকরণ (নামের ওপর প্রথম অগ্রাধিকার)
     function detectCourier(text, trackingId, platform) {
-      if (trackingId.toUpperCase().startsWith("SF") || /Shadowfax|dowfax/i.test(text)) return "Shadowfax";
-      if (trackingId.startsWith("1340") || (trackingId.startsWith("14") && trackingId.length >= 14) || /Xpressbees|Xpress\s*bees|\bXB\b/i.test(text)) return "Xpressbees";
+      if (/Delhivery/i.test(text)) return "Delhivery";
+      if (/Xpress\s*bees|Xpressbees|\bXB\b/i.test(text)) return "Xpressbees";
+      if (/Shadowfax|dowfax/i.test(text) || trackingId.toUpperCase().startsWith("SF")) return "Shadowfax";
       if (platform === "Amazon" || /ATSPL|ATS|Amazon\s*Shipping/i.test(text)) return "Amazon Shipping (ATS)";
-      if (/Delhivery/i.test(text) || (/^(12|13|14|33|37)\d{10,12}$/.test(trackingId) && platform !== "Amazon")) return "Delhivery";
       if (/Ekart|eKart/i.test(text) || trackingId.startsWith("FMPC") || trackingId.startsWith("FMPP")) return "Ekart";
       if (/Ecom\s*Express/i.test(text)) return "Ecom Express";
+
+      // যদি টেক্সটে নাম না পাওয়া যায় তবে নম্বরের প্রিফিক্স দিয়ে ধরা
+      if (trackingId.startsWith("1340")) return "Xpressbees";
+      if (/^(12|13|14|33|37)\d{10,14}$/.test(trackingId)) {
+        return platform === "Amazon" ? "Amazon Shipping (ATS)" : "Delhivery";
+      }
 
       return "অন্যান্য";
     }
 
-    // Delhivery, Xpressbees, Shadowfax ও Amazon নিখুঁতভাবে ধরার ফাংশন
+    // ট্র্যাকিং নম্বর খোঁজার উন্নত লজিক
     function findTrackingNumber(text, rawOrderId, platform) {
       const pureOrderId = rawOrderId.replace(/_\d+$/, '');
 
-      // ১. Shadowfax সরাসরি রিড (যেমন SF4006123782FPL বা SF এর পর ডিজিট)
+      // ১. Shadowfax সরাসরি রিড
       const sfDirect = text.match(/\bSF\s*([0-9]{8,14}\s*[A-Z]{0,5})\b/i);
       if (sfDirect && sfDirect[1]) {
         return ("SF" + sfDirect[1].replace(/\s+/g, '')).toUpperCase();
       }
 
-      // ২. লেবেলের ট্যাগ অনুযায়ী (AWB, Waybill, Tracking No) সরাসরি খোঁজা
+      // ২. Amazon AWB সরাসরি রিড
+      const amzAwbDirect = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
+      if (amzAwbDirect && amzAwbDirect[1]) return amzAwbDirect[1].trim();
+
+      // ৩. সাধারণ ট্যাগ (AWB / Tracking / Waybill)
       const tagMatch = text.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{10,22})/i);
       if (tagMatch && tagMatch[1]) {
         let cleanTagVal = tagMatch[1].trim();
         if (!cleanTagVal.includes(pureOrderId)) return cleanTagVal;
       }
 
-      // ৩. Amazon সরাসরি AWB
-      const amzAwbDirect = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
-      if (amzAwbDirect && amzAwbDirect[1]) return amzAwbDirect[1].trim();
-
-      // ৪. Xpressbees নির্দিষ্ট ফরম্যাট: ১৪ থেকে ১৬ ডিজিটের নম্বর (যা সাধারণত 14 বা 13 দিয়ে শুরু)
-      const xbMatch = text.match(/\b(14\d{12,14}|134\d{11,13})\b/g);
-      if (xbMatch) {
-        for (let num of xbMatch) {
-          if (num !== pureOrderId) return num.trim();
-        }
-      }
-
-      // ৫. Delhivery নির্দিষ্ট ফরম্যাট: ১২ থেকে ১৩ ডিজিটের নম্বর (যেমন 12..., 13..., 14..., 33..., 37...)
-      const dlMatch = text.match(/\b(12\d{10,11}|13\d{10,11}|14\d{10,11}|33\d{10,11}|37\d{10,11})\b/g);
-      if (dlMatch) {
-        for (let num of dlMatch) {
-          if (num !== pureOrderId) return num.trim();
-        }
-      }
-
-      // ৬. Ekart প্রিফিক্স
+      // ৪. Ekart প্রিফিক্স
       const ekartMatch = text.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+)\b/i);
       if (ekartMatch) return ekartMatch[0].trim();
 
-      // ৭. সাধারণ ব্যাকআপ: যেকোনো ১২ থেকে ১৬ ডিজিটের নম্বর (তারিখ বাদ দিয়ে)
+      // ৫. ১২ থেকে ১৬ ডিজিটের নম্বর খোঁজা (অর্ডার আইডি এবং পিনকোড/তারিখ বাদ দিয়ে)
       const allNumbers = text.match(/\b\d{12,16}\b/g) || [];
       for (let num of allNumbers) {
         let clean = num.trim();
-        if (clean !== pureOrderId && !clean.startsWith("2026") && !clean.startsWith("2025") && !clean.startsWith("19")) {
+        if (clean !== pureOrderId && !clean.startsWith("2026") && !clean.startsWith("2025") && !clean.startsWith("19") && !clean.startsWith("3329")) {
           return clean;
         }
       }
 
-      // ৮. যদি মাঝে স্পেস থাকে (যেমন "1 4 0 2 3 ...")
-      const digitSpacedMatch = text.match(/(?:\b|\s)((?:\d\s+){11,15}\d)(?:\b|\s)/);
-      if (digitSpacedMatch && digitSpacedMatch[1]) {
-        let joined = digitSpacedMatch[1].replace(/\s+/g, '');
-        if (joined !== pureOrderId) return joined;
+      // ৬. ১০ থেকে ১১ ডিজিটের নম্বর
+      const tenDigitNumbers = text.match(/\b\d{10,11}\b/g) || [];
+      for (let num of tenDigitNumbers) {
+        let clean = num.trim();
+        if (clean !== pureOrderId && !clean.startsWith("91") && !clean.startsWith("202")) return clean;
       }
 
       return "নেই";
