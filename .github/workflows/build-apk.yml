@@ -19,7 +19,7 @@ jobs:
 
       - name: Build Pure Android APK
         run: |
-          mkdir -p build/assets build/res/values build/res/xml build/res/drawable build/src/com/nxtbeverage/dispatch build/gen build/obj build/bin
+          mkdir -p build/assets build/res/values build/res/drawable build/src/com/nxtbeverage/dispatch build/gen build/obj build/bin
 
           if [ -f index.htm ]; then
             cp index.htm build/assets/index.html
@@ -33,14 +33,6 @@ jobs:
             cp icon.png build/res/drawable/app_icon.png
           fi
 
-          # FileProvider paths
-          cat << 'EOF' > build/res/xml/file_paths.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <paths xmlns:android="http://schemas.android.com/apk/res/android">
-              <cache-path name="shared_files" path="." />
-          </paths>
-          EOF
-
           # AndroidManifest.xml
           cat << 'EOF' > build/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
@@ -52,7 +44,7 @@ jobs:
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.CAMERA" />
               <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-              <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
               <uses-feature android:name="android.hardware.camera" android:required="false" />
               <application
                   android:label="@string/app_name"
@@ -69,15 +61,6 @@ jobs:
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
                   </activity>
-                  <provider
-                      android:name="androidx.core.content.FileProvider"
-                      android:authorities="com.nxtbeverage.dispatch.fileprovider"
-                      android:exported="false"
-                      android:grantUriPermissions="true">
-                      <meta-data
-                          android:name="android.support.FILE_PROVIDER_PATHS"
-                          android:resource="@xml/file_paths" />
-                  </provider>
               </application>
           </manifest>
           EOF
@@ -90,18 +73,21 @@ jobs:
           </resources>
           EOF
 
-          # MainActivity.java
+          # MainActivity.java (কোনো এক্সটার্নাল লাইব্রেরি ছাড়া বিশুদ্ধ অ্যান্ড্রয়েড শেয়ার)
           cat << 'EOF' > build/src/com/nxtbeverage/dispatch/MainActivity.java
           package com.nxtbeverage.dispatch;
 
           import android.Manifest;
           import android.app.Activity;
           import android.content.ClipData;
+          import android.content.ContentValues;
           import android.content.Intent;
           import android.content.pm.PackageManager;
           import android.net.Uri;
           import android.os.Build;
           import android.os.Bundle;
+          import android.os.Environment;
+          import android.provider.MediaStore;
           import android.webkit.JavascriptInterface;
           import android.webkit.PermissionRequest;
           import android.webkit.ValueCallback;
@@ -111,6 +97,7 @@ jobs:
           import android.webkit.WebViewClient;
           import java.io.File;
           import java.io.FileOutputStream;
+          import java.io.OutputStream;
 
           public class MainActivity extends Activity {
               private WebView webView;
@@ -177,31 +164,47 @@ jobs:
 
               public class AndroidShareBridge {
                   @JavascriptInterface
-                  public void shareCSV(String csvContent, String fileName) {
-                      try {
-                          File cachePath = new File(getCacheDir(), "reports");
-                          cachePath.mkdirs();
-                          File file = new File(cachePath, fileName);
-                          FileOutputStream stream = new FileOutputStream(file);
-                          stream.write(csvContent.getBytes("UTF-8"));
-                          stream.close();
+                  public void shareCSV(final String csvContent, final String fileName) {
+                      runOnUiThread(new Runnable() {
+                          @Override
+                          public void run() {
+                              try {
+                                  Uri fileUri = null;
+                                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                      ContentValues values = new ContentValues();
+                                      values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
+                                      values.put(MediaStore.Downloads.MIME_TYPE, "text/csv");
+                                      values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
 
-                          Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
-                              MainActivity.this,
-                              "com.nxtbeverage.dispatch.fileprovider",
-                              file
-                          );
+                                      fileUri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                                      if (fileUri != null) {
+                                          OutputStream out = getContentResolver().openOutputStream(fileUri);
+                                          out.write(csvContent.getBytes("UTF-8"));
+                                          out.close();
+                                      }
+                                  } else {
+                                      File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                                      File file = new File(dir, fileName);
+                                      FileOutputStream out = new FileOutputStream(file);
+                                      out.write(csvContent.getBytes("UTF-8"));
+                                      out.close();
+                                      fileUri = Uri.fromFile(file);
+                                  }
 
-                          Intent shareIntent = new Intent(Intent.ACTION_SEND);
-                          shareIntent.setType("text/csv");
-                          shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
-                          shareIntent.putExtra(Intent.EXTRA_SUBJECT, "NXT Orders Report");
-                          shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                  if (fileUri != null) {
+                                      Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                                      shareIntent.setType("text/csv");
+                                      shareIntent.putExtra(Intent.EXTRA_STREAM, fileUri);
+                                      shareIntent.putExtra(Intent.EXTRA_SUBJECT, "NXT Orders Report");
+                                      shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-                          startActivity(Intent.createChooser(shareIntent, "Save or Share Excel Report"));
-                      } catch (Exception e) {
-                          e.printStackTrace();
-                      }
+                                      startActivity(Intent.createChooser(shareIntent, "Save to Drive or Share"));
+                                  }
+                              } catch (Exception e) {
+                                  e.printStackTrace();
+                              }
+                          }
+                      });
                   }
               }
 
@@ -254,17 +257,12 @@ jobs:
           BUILD_TOOLS=$SDK_ROOT/build-tools/34.0.0
           PLATFORM=$SDK_ROOT/platforms/android-34/android.jar
 
-          # androidx core download for FileProvider
-          mvn dependency:get -Dartifact=androidx.core:core:1.12.0 -Ddest=build/core.aar
-          unzip -q build/core.aar classes.jar -d build/
-          mv build/classes.jar build/androidx-core.jar
-
           $BUILD_TOOLS/aapt2 compile --dir build/res -o build/compiled_res.zip
           $BUILD_TOOLS/aapt2 link -I $PLATFORM -A build/assets --manifest build/AndroidManifest.xml -o build/bin/base.apk --java build/gen build/compiled_res.zip --auto-add-overlay
 
-          javac -cp $PLATFORM:build/androidx-core.jar -d build/obj build/gen/com/nxtbeverage/dispatch/R.java build/src/com/nxtbeverage/dispatch/MainActivity.java
+          javac -cp $PLATFORM -d build/obj build/gen/com/nxtbeverage/dispatch/R.java build/src/com/nxtbeverage/dispatch/MainActivity.java
 
-          $BUILD_TOOLS/d8 $(find build/obj -name "*.class") build/androidx-core.jar --output build/bin/
+          $BUILD_TOOLS/d8 $(find build/obj -name "*.class") --output build/bin/
 
           cd build/bin
           $BUILD_TOOLS/aapt add base.apk classes.dex
