@@ -21,24 +21,33 @@ jobs:
         run: |
           mkdir -p build/assets build/res/values build/res/drawable build/src/com/nxtbeverage/dispatch build/gen build/obj build/bin
 
-          cp index.html build/assets/
+          # মূল ফাইল কপি (index.htm অথবা index.html)
+          if [ -f index.htm ]; then
+            cp index.htm build/assets/index.html
+          elif [ -f index.html ]; then
+            cp index.html build/assets/index.html
+          fi
+
           if [ -f manifest.json ]; then cp manifest.json build/assets/; fi
 
-          # কাস্টম লোগো বসানো
+          # কাস্টম লোগো থাকলে বসানো
           if [ -f icon.png ]; then
             cp icon.png build/res/drawable/app_icon.png
           fi
 
+          # AndroidManifest.xml (ক্যামেরা ও স্টোরেজ পারমিশন সহ)
           cat << 'EOF' > build/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.nxtbeverage.dispatch"
-              android:versionCode="4"
-              android:versionName="1.3">
+              android:versionCode="5"
+              android:versionName="1.4">
               <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
               <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.CAMERA" />
               <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
               <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+              <uses-feature android:name="android.hardware.camera" android:required="false" />
               <application
                   android:label="@string/app_name"
                   android:icon="@drawable/app_icon"
@@ -58,6 +67,7 @@ jobs:
           </manifest>
           EOF
 
+          # strings.xml
           cat << 'EOF' > build/res/values/strings.xml
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -65,13 +75,18 @@ jobs:
           </resources>
           EOF
 
+          # MainActivity.java (ক্যামেরা পারমিশন প্রম্পট ও ফাইল আপলোড সাপোর্ট)
           cat << 'EOF' > build/src/com/nxtbeverage/dispatch/MainActivity.java
           package com.nxtbeverage.dispatch;
 
+          import android.Manifest;
           import android.app.Activity;
           import android.content.Intent;
+          import android.content.pm.PackageManager;
           import android.net.Uri;
+          import android.os.Build;
           import android.os.Bundle;
+          import android.webkit.PermissionRequest;
           import android.webkit.ValueCallback;
           import android.webkit.WebChromeClient;
           import android.webkit.WebSettings;
@@ -82,6 +97,7 @@ jobs:
               private WebView webView;
               private ValueCallback<Uri[]> uploadMessage;
               private final static int FILECHOOSER_RESULTCODE = 1;
+              private final static int PERMISSION_REQ_CODE = 200;
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
@@ -89,15 +105,27 @@ jobs:
                   webView = new WebView(this);
                   setContentView(webView);
 
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                          requestPermissions(new String[]{Manifest.permission.CAMERA}, PERMISSION_REQ_CODE);
+                      }
+                  }
+
                   WebSettings s = webView.getSettings();
                   s.setJavaScriptEnabled(true);
                   s.setDomStorageEnabled(true);
                   s.setAllowFileAccess(true);
                   s.setAllowContentAccess(true);
                   s.setDatabaseEnabled(true);
+                  s.setMediaPlaybackRequiresUserGesture(false);
 
                   webView.setWebViewClient(new WebViewClient());
                   webView.setWebChromeClient(new WebChromeClient() {
+                      @Override
+                      public void onPermissionRequest(final PermissionRequest request) {
+                          request.grant(request.getResources());
+                      }
+
                       @Override
                       public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
                           if (uploadMessage != null) {
