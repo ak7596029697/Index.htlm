@@ -21,7 +21,7 @@ jobs:
         run: |
           mkdir -p build/assets build/res/values build/res/drawable build/src/com/nxtbeverage/dispatch build/gen build/obj build/bin
 
-          # মূল ফাইল কপি (index.htm অথবা index.html)
+          # মূল ফাইল কপি
           if [ -f index.htm ]; then
             cp index.htm build/assets/index.html
           elif [ -f index.html ]; then
@@ -30,18 +30,17 @@ jobs:
 
           if [ -f manifest.json ]; then cp manifest.json build/assets/; fi
 
-          # কাস্টম লোগো থাকলে বসানো
           if [ -f icon.png ]; then
             cp icon.png build/res/drawable/app_icon.png
           fi
 
-          # AndroidManifest.xml (ক্যামেরা ও স্টোরেজ পারমিশন সহ)
+          # AndroidManifest.xml
           cat << 'EOF' > build/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.nxtbeverage.dispatch"
-              android:versionCode="5"
-              android:versionName="1.4">
+              android:versionCode="7"
+              android:versionName="1.6">
               <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.CAMERA" />
@@ -75,12 +74,13 @@ jobs:
           </resources>
           EOF
 
-          # MainActivity.java (ক্যামেরা পারমিশন প্রম্পট ও ফাইল আপলোড সাপোর্ট)
+          # MainActivity.java (সঠিক মাল্টিপল ফাইল ইনটেন্ট ও রিড পারমিশন সহ)
           cat << 'EOF' > build/src/com/nxtbeverage/dispatch/MainActivity.java
           package com.nxtbeverage.dispatch;
 
           import android.Manifest;
           import android.app.Activity;
+          import android.content.ClipData;
           import android.content.Intent;
           import android.content.pm.PackageManager;
           import android.net.Uri;
@@ -92,11 +92,12 @@ jobs:
           import android.webkit.WebSettings;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
+          import java.util.ArrayList;
 
           public class MainActivity extends Activity {
               private WebView webView;
               private ValueCallback<Uri[]> uploadMessage;
-              private final static int FILECHOOSER_RESULTCODE = 1;
+              private final static int FILECHOOSER_RESULTCODE = 101;
               private final static int PERMISSION_REQ_CODE = 200;
 
               @Override
@@ -134,7 +135,13 @@ jobs:
                           }
                           uploadMessage = filePathCallback;
 
-                          Intent intent = fileChooserParams.createIntent();
+                          // অ্যান্ড্রয়েড স্ট্যান্ডার্ড OPEN_DOCUMENT ইনটেন্ট (মাল্টিপল ফাইল অ্যাক্সেসের জন্য সবচেয়ে নির্ভরযোগ্য)
+                          Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                          intent.addCategory(Intent.CATEGORY_OPENABLE);
+                          intent.setType("application/pdf");
+                          intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                          intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+
                           try {
                               startActivityForResult(intent, FILECHOOSER_RESULTCODE);
                           } catch (Exception e) {
@@ -152,7 +159,32 @@ jobs:
               protected void onActivityResult(int requestCode, int resultCode, Intent data) {
                   if (requestCode == FILECHOOSER_RESULTCODE) {
                       if (uploadMessage == null) return;
-                      uploadMessage.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+                      Uri[] results = null;
+
+                      if (resultCode == Activity.RESULT_OK && data != null) {
+                          // একাধিক ফাইল সিলেক্ট করলে ClipData চেক করা
+                          ClipData clipData = data.getClipData();
+                          if (clipData != null) {
+                              int count = clipData.getItemCount();
+                              results = new Uri[count];
+                              for (int i = 0; i < count; i++) {
+                                  Uri uri = clipData.getItemAt(i).getUri();
+                                  try {
+                                      grantUriPermission(getPackageName(), uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                  } catch (Exception ignored) {}
+                                  results[i] = uri;
+                              }
+                          } else if (data.getData() != null) {
+                              // একটি ফাইল সিলেক্ট করলে
+                              Uri uri = data.getData();
+                              try {
+                                  grantUriPermission(getPackageName(), uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                              } catch (Exception ignored) {}
+                              results = new Uri[]{uri};
+                          }
+                      }
+
+                      uploadMessage.onReceiveValue(results);
                       uploadMessage = null;
                   } else {
                       super.onActivityResult(requestCode, resultCode, data);
