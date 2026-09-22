@@ -17,10 +17,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Build Standalone WebView APK
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           mkdir -p project/app/src/main/java/com/smartorder/app
           mkdir -p project/app/src/main/assets
