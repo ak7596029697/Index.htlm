@@ -33,7 +33,6 @@
     .btn-scan-return { background: #b91c1c; }
     .btn-scan-return:hover { background: #991b1b; }
 
-    /* ক্যামেরা স্ক্যানার পপ-আপ/ভিউ */
     #scanner-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
     #scanner-box { width: 100%; max-width: 400px; background: #1e293b; border-radius: 12px; padding: 16px; border: 1px solid #38bdf8; text-align: center; }
     #scanner-preview { width: 100%; max-height: 260px; border-radius: 8px; overflow: hidden; }
@@ -95,7 +94,6 @@
           <div style="font-size: 11px; color: #94a3b8;">(Amazon, Flipkart, Meesho এক বা একাধিক ফাইল)</div>
           <input type="file" id="pdfInput" accept="application/pdf" multiple onchange="processMultiplePDFs(this)">
         </label>
-        <!-- ডিসপ্যাচ স্ক্যান বাটন -->
         <button class="btn-cam-scan btn-scan-dispatch" onclick="startScanner('dispatch')">📷 ক্যামেরা দিয়ে ডিসপ্যাচ বারকোড স্ক্যান</button>
       </div>
 
@@ -109,7 +107,6 @@
           <input type="file" id="returnPdfInput" accept="application/pdf" multiple onchange="processReturnPDFs(this)">
         </label>
         
-        <!-- রিটার্ন স্ক্যান বাটন -->
         <button class="btn-cam-scan btn-scan-return" onclick="startScanner('return')">📷 ক্যামেরা দিয়ে রিটার্ন বারকোড স্ক্যান</button>
 
         <div class="return-input-group">
@@ -124,7 +121,7 @@
 
     <div class="controls">
       <button class="action-btn btn-save" id="saveBtn" onclick="manualSaveToMemory()">💾 মেমরিতে সেভ করুন</button>
-      <button class="action-btn btn-export" id="exportBtn" onclick="exportToCSV()">📥 সব অর্ডারের Excel (CSV) ডাউনলোড</button>
+      <button class="action-btn btn-export" id="exportBtn" onclick="exportToCSV()">📤 Excel ফাইল সেভ ও শেয়ার (Drive / WhatsApp)</button>
       <button class="action-btn btn-remove-dup" id="removeDupBtn" onclick="removeOnlyDuplicates()">🧹 ডুপ্লিকেট মুছুন</button>
       <button class="action-btn btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️ সব মুছুন</button>
     </div>
@@ -152,7 +149,6 @@
     </div>
   </div>
 
-  <!-- ক্যামেরা স্ক্যানার উইন্ডো -->
   <div id="scanner-modal">
     <div id="scanner-box">
       <h3 id="scanner-title" style="color:#38bdf8; font-size:14px; margin-bottom:8px;">📷 বারকোড স্ক্যানার</h3>
@@ -170,7 +166,7 @@
     let extractedData = JSON.parse(localStorage.getItem('my_orders_db') || '[]');
     let ocrWorker = null;
     let html5QrScanner = null;
-    let currentScanMode = 'return'; // 'dispatch' অথবা 'return'
+    let currentScanMode = 'return';
 
     async function initOCR() {
       if (!ocrWorker) {
@@ -324,7 +320,7 @@
     }
 
     async function processMultiplePDFs(input) {
-      const files = input.files;
+      const files = Array.from(input.files);
       if (!files || files.length === 0) return;
 
       const statusBox = document.getElementById('statusBox');
@@ -338,21 +334,23 @@
 
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, disableFontFace: true }).promise;
           const totalPages = pdf.numPages;
 
           let pendingAmazonAWB = "";
 
           for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-            statusBox.innerHTML = `⏳ প্রসেস হচ্ছে: পাতা ${pageNum} / ${totalPages}`;
+            statusBox.innerHTML = `⏳ ফাইল (${fileIndex + 1}/${files.length}) - পাতা ${pageNum} / ${totalPages}`;
             const page = await pdf.getPage(pageNum);
             const textContent = await page.getTextContent();
             const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
             const pageText = items.join(' ');
 
-            if (items.length === 0 || pageText.includes("AWB") || pageText.length < 50) {
-              let awb = await extractAmazonAWBFromImage(page);
-              if (awb) pendingAmazonAWB = awb;
+            if (pageText.length < 40) {
+              try {
+                let awb = await extractAmazonAWBFromImage(page);
+                if (awb) pendingAmazonAWB = awb;
+              } catch(e) {}
             }
 
             let platform = "অন্যান্য";
@@ -390,7 +388,9 @@
 
               pendingAmazonAWB = "";
             }
+            page.cleanup();
           }
+          pdf.destroy();
         } catch (err) {
           console.error(err);
         }
@@ -404,7 +404,7 @@
     }
 
     async function processReturnPDFs(input) {
-      const files = input.files;
+      const files = Array.from(input.files);
       if (!files || files.length === 0) return;
 
       const statusBox = document.getElementById('statusBox');
@@ -415,7 +415,7 @@
       for (let file of files) {
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, disableFontFace: true }).promise;
           for (let p = 1; p <= pdf.numPages; p++) {
             const page = await pdf.getPage(p);
             const textContent = await page.getTextContent();
@@ -427,7 +427,9 @@
                 markedCount++;
               }
             });
+            page.cleanup();
           }
+          pdf.destroy();
         } catch (e) {
           console.error(e);
         }
@@ -455,7 +457,6 @@
       input.value = '';
     }
 
-    // নিখুঁত রিটার্ন মার্কিং (ট্র্যাকিং বা অর্ডার দিয়ে খোঁজা)
     function markAsReturned(searchKey) {
       let found = false;
       extractedData.forEach(item => {
@@ -466,7 +467,6 @@
         }
       });
 
-      // মেমরিতে না থাকলে নতুন রিটার্ন হিসেবে যোগ
       if (!found) {
         let isOrder = amazonOrderRegex.test(searchKey) || flipkartOrderRegex.test(searchKey) || meeshoOrderRegex.test(searchKey);
         let pForm = "অন্যান্য";
@@ -487,7 +487,7 @@
           platform: pForm,
           courier: cName,
           orderId: isOrder ? searchKey : "স্ক্যান রিটার্ন",
-          trackingId: isOrder ? "নেই" : searchKey, // ট্র্যাকিং আইডি হিসেবে সঠিক ঘরে সেভ
+          trackingId: isOrder ? "নেই" : searchKey,
           status: "Returned"
         });
       }
@@ -497,9 +497,7 @@
       document.getElementById('statusBox').innerHTML = `🔄 <b>${searchKey}</b> লাল রঙে রিটার্ন চিহ্নিত ও অটো-সেভ হয়েছে!`;
     }
 
-    // ডিসপ্যাচ স্ক্যান হ্যান্ডলার (বারকোড দিয়ে নতুন ডিসপ্যাচ এন্ট্রি)
     function handleDispatchScan(scannedCode) {
-      // ট্র্যাকিং কোড দিয়ে ডুপ্লিকেট চেক
       let existing = extractedData.find(item => item.trackingId.toLowerCase() === scannedCode.toLowerCase());
       if (existing) {
         alert(`⚠️ এই ট্র্যাকিং নম্বরটি (${scannedCode}) ইতিমধ্যে মেমরিতে আছে!`);
@@ -512,7 +510,7 @@
         platform: "বারকোড ডিসপ্যাচ",
         courier: courier,
         orderId: "স্ক্যান ডিসপ্যাচ",
-        trackingId: scannedCode, // ট্র্যাকিং আইডির ঘরে সঠিক এন্ট্রি
+        trackingId: scannedCode,
         status: "Unique"
       });
 
@@ -538,7 +536,6 @@
       }
     }
 
-    // ক্যামেরা স্ক্যানার চালু
     function startScanner(mode) {
       currentScanMode = mode;
       const modal = document.getElementById("scanner-modal");
@@ -637,20 +634,41 @@
       }
     }
 
-    function exportToCSV() {
+    // নেটিভ গুগল ড্রাইভ, হোয়াটসঅ্যাপ ও জিমেইল শেয়ার শিট লজিক
+    async function exportToCSV() {
       if (extractedData.length === 0) {
-        alert("ডাউনলোড করার মতো কোনো ডেটা নেই!");
+        alert("শেয়ার বা সেভ করার মতো কোনো ডেটা নেই!");
         return;
       }
+      
       let csv = "\uFEFFতারিখ,প্ল্যাটফর্ম,কুরিয়ার পার্টনার,অর্ডার আইডি,ট্র্যাকিং আইডি,স্ট্যাটাস\n";
       extractedData.forEach(row => {
         csv += `"${row.date}","${row.platform}","${row.courier}","${row.orderId}","${row.trackingId}","${row.status}"\n`;
       });
+
+      const fileName = `Orders_Report_${new Date().toISOString().slice(0,10)}.csv`;
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const file = new File([blob], fileName, { type: 'text/csv' });
+
+      // অ্যান্ড্রয়েড নেটিভ শেয়ার শিট কল করা (Drive, WhatsApp, Gmail অপশন ওপেন হবে)
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: 'NXT Orders Excel Report',
+            text: 'আজকের ডিসপ্যাচ ও রিটার্ন অর্ডারের আপডেটেড তালিকা।',
+            files: [file]
+          });
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return; // ইউজার নিজেই ব্যাক করলে কিছু হবে না
+        }
+      }
+
+      // শেয়ার সাপোর্ট না করলে সাধারণ ডাউনলোড ব্যাকআপ
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Orders_Report_${new Date().toISOString().slice(0,10)}.csv`;
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
