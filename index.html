@@ -1,575 +1,684 @@
 <!DOCTYPE html>
 <html lang="bn">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NXT Dispatch & Return Manager</title>
-    <!-- PDF.js লাইব্রেরি -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <!-- Barcode & QR Code স্ক্যানার লাইব্রেরি -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    </script>
-    <style>
-        :root {
-            --bg-color: #0d1424;
-            --card-bg: #151e34;
-            --card-border: #233152;
-            --accent-blue: #38bdf8;
-            --accent-green: #10b981;
-            --accent-red: #ef4444;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --input-bg: #0b1120;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bulk Shipping & Return Order Manager</title>
+  <!-- PDF.js, Tesseract OCR & Barcode Scanner Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background: #0f172a; color: #f8fafc; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+    .container { width: 100%; max-width: 1050px; background: #1e293b; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    h1 { font-size: 20px; color: #38bdf8; text-align: center; margin-bottom: 6px; }
+    p.subtitle { font-size: 13px; color: #94a3b8; text-align: center; margin-bottom: 20px; }
+    
+    .grid-sections { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    @media (max-width: 700px) { .grid-sections { grid-template-columns: 1fr; } }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            -webkit-tap-highlight-color: transparent;
-        }
+    .card { background: #0f172a; border-radius: 8px; padding: 15px; border: 1px solid #334155; }
+    .card-title { font-size: 14px; font-weight: bold; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+    .card-dispatch { border-color: #38bdf8; }
+    .card-return { border-color: #ef4444; }
 
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            padding: 14px;
-            display: flex;
-            justify-content: center;
-        }
+    .upload-box { border: 2px dashed #475569; border-radius: 6px; padding: 15px; text-align: center; cursor: pointer; background: rgba(255,255,255,0.02); display: block; }
+    .upload-box:hover { border-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }
+    input[type="file"] { display: none; }
 
-        .container {
-            width: 100%;
-            max-width: 480px;
-        }
+    .return-input-group { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .return-input-group input { flex: 2; min-width: 180px; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; background: #1e293b; color: white; font-family: monospace; font-size: 13px; }
+    .btn-return-mark { padding: 8px 12px; border-radius: 6px; border: none; background: #ef4444; color: #ffffff; font-weight: bold; cursor: pointer; }
+    .btn-return-unmark { padding: 8px 12px; border-radius: 6px; border: none; background: #475569; color: #ffffff; font-weight: bold; cursor: pointer; }
+    .btn-return-unmark:hover { background: #64748b; }
+    .btn-cam-scan { width: 100%; margin-top: 10px; padding: 8px; border-radius: 6px; border: none; background: #0284c7; color: #ffffff; font-weight: bold; cursor: pointer; font-size: 13px; }
 
-        .app-header {
-            text-align: center;
-            margin-bottom: 18px;
-        }
+    /* ক্যামেরা স্ক্যানার বক্স */
+    #scanner-box { display: none; margin-top: 10px; background: #000; border-radius: 8px; padding: 8px; border: 1px solid #38bdf8; text-align: center; }
+    #scanner-preview { width: 100%; max-height: 240px; }
 
-        .app-header h1 {
-            color: var(--accent-blue);
-            font-size: 19px;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
+    .status-bar { margin-top: 15px; font-size: 14px; text-align: center; font-weight: bold; color: #38bdf8; min-height: 26px; padding: 6px 10px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); }
+    .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+    button.action-btn { padding: 10px 14px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+    
+    .btn-save { background: #3b82f6; color: white; display: none; flex: 1.5; }
+    .btn-save:hover { background: #2563eb; }
+    .btn-export { background: #10b981; color: white; display: none; flex: 2; }
+    .btn-remove-dup { background: #64748b; color: white; display: none; flex: 1.5; }
+    .btn-clear { background: #ef4444; color: white; display: none; width: 45px; }
 
-        .app-header p {
-            color: var(--text-muted);
-            font-size: 11.5px;
-            line-height: 1.4;
-        }
+    .search-container { margin-top: 18px; display: none; }
+    .search-box { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid #38bdf8; background: #0f172a; color: white; font-size: 13px; font-family: monospace; outline: none; }
+    .search-box:focus { box-shadow: 0 0 10px rgba(56, 189, 248, 0.4); }
 
-        .card {
-            background-color: var(--card-bg);
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 14px;
-            border: 1px solid var(--card-border);
-        }
+    .results { margin-top: 12px; max-height: 480px; overflow-y: auto; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid #334155; }
+    th { background: #1e293b; color: #94a3b8; position: sticky; top: 0; z-index: 10; }
+    td { font-family: monospace; }
+    
+    .badge-unique { background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; cursor: pointer; }
+    .badge-duplicate { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; }
+    
+    .badge-returned { background: #ef4444; color: #ffffff; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+    .badge-returned:hover { background: #dc2626; }
+    .row-returned { background: rgba(239, 68, 68, 0.22) !important; border-left: 5px solid #ef4444; }
+    .row-returned td { color: #fca5a5 !important; }
 
-        .card-dispatch { border: 1px solid #1e40af; }
-        .card-return { border: 1px solid #991b1b; }
-
-        .card-title {
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .card-title.blue { color: #38bdf8; }
-        .card-title.red { color: #f87171; }
-
-        .upload-area {
-            border: 1.5px dashed #3b82f6;
-            background: rgba(30, 58, 138, 0.12);
-            border-radius: 10px;
-            padding: 16px 10px;
-            text-align: center;
-            cursor: pointer;
-        }
-
-        .upload-area.return-border {
-            border: 1.5px dashed #ef4444;
-            background: rgba(153, 27, 27, 0.12);
-        }
-
-        .upload-area input { display: none; }
-        .upload-icon { font-size: 24px; margin-bottom: 4px; }
-        .upload-text { font-size: 13.5px; font-weight: 600; color: #ffffff; }
-        .upload-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
-
-        .input-group {
-            display: flex;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .text-input {
-            flex: 1;
-            padding: 10px 12px;
-            border-radius: 8px;
-            border: 1px solid var(--card-border);
-            background: var(--input-bg);
-            color: #ffffff;
-            font-size: 13px;
-            outline: none;
-        }
-
-        .btn {
-            border: none;
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
-        }
-
-        .btn-red { background-color: var(--accent-red); color: #fff; }
-        .btn-gray { background-color: #334155; color: #fff; }
-        .btn-green { background-color: var(--accent-green); color: #fff; width: 100%; margin-top: 10px; }
-        .btn-scan { background-color: #0284c7; color: #fff; width: 100%; margin-top: 10px; }
-        .btn-clear { background-color: #450a0a; color: #fca5a5; border: 1px solid #7f1d1d; width: 100%; margin-top: 12px; }
-
-        /* ক্যামেরা স্ক্যানার উইন্ডো */
-        #scanner-container {
-            display: none;
-            margin-top: 10px;
-            background: #000;
-            border-radius: 8px;
-            overflow: hidden;
-            border: 1px solid var(--accent-blue);
-            text-align: center;
-            padding: 10px;
-        }
-
-        #scanner-view {
-            width: 100%;
-            max-height: 250px;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-
-        .stat-card {
-            background: var(--input-bg);
-            padding: 8px;
-            border-radius: 8px;
-            text-align: center;
-            border: 1px solid var(--card-border);
-        }
-
-        .stat-card .val { font-size: 17px; font-weight: 700; display: block; }
-        .stat-card .lbl { font-size: 11px; color: var(--text-muted); }
-        .stat-total .val { color: var(--accent-blue); }
-        .stat-dispatch .val { color: var(--accent-green); }
-        .stat-return .val { color: var(--accent-red); }
-
-        .search-box {
-            width: 100%;
-            padding: 8px 12px;
-            border-radius: 6px;
-            border: 1px solid var(--card-border);
-            background: var(--input-bg);
-            color: #fff;
-            font-size: 12px;
-            margin-bottom: 10px;
-        }
-
-        .table-wrap {
-            max-height: 260px;
-            overflow-y: auto;
-            border: 1px solid var(--card-border);
-            border-radius: 8px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-        }
-
-        th {
-            background: #1e293b;
-            color: var(--text-muted);
-            padding: 8px 6px;
-            text-align: left;
-            position: sticky;
-            top: 0;
-            font-weight: 600;
-        }
-
-        td {
-            padding: 8px 6px;
-            border-top: 1px solid var(--card-border);
-            color: #e2e8f0;
-        }
-
-        .tag {
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 10.5px;
-            font-weight: bold;
-        }
-
-        .tag-dispatched { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-        .tag-returned { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-
-        .btn-del-single {
-            color: #ef4444;
-            font-size: 15px;
-            cursor: pointer;
-            padding: 2px 6px;
-            font-weight: bold;
-        }
-
-        #toast {
-            position: fixed;
-            top: 16px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #059669;
-            color: #ffffff;
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            display: none;
-            z-index: 99999;
-        }
-    </style>
+    .btn-del-row { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 14px; padding: 2px 6px; }
+    .btn-del-row:hover { background: rgba(239, 68, 68, 0.2); border-radius: 4px; }
+    
+    .track-link { color: #38bdf8; text-decoration: underline; font-weight: bold; cursor: pointer; }
+    .track-link:hover { color: #7dd3fc; }
+  </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="app-header">
-        <h1>📄 Dispatch & Return Order Manager</h1>
-        <p>Amazon, Flipkart ও Meesho লেবেল, ক্যামেরা স্ক্যান ও মেমোরি সেভ</p>
+  <div class="container">
+    <h1>📄 Dispatch & Return Order Manager</h1>
+    <p class="subtitle">Amazon, Flipkart ও Meesho শিপিং লেবেল ও মেমরি সেভ সিস্টেম</p>
+
+    <div class="grid-sections">
+      <div class="card card-dispatch">
+        <div class="card-title" style="color: #38bdf8;">📦 ডিসপ্যাচ অর্ডার (শিপিং লেবেল)</div>
+        <label class="upload-box" for="pdfInput">
+          <div style="font-size: 24px;">📑</div>
+          <div style="font-size: 13px; font-weight: bold; margin-top: 4px;">শিপিং লেবেল PDF বেছে নিন</div>
+          <div style="font-size: 11px; color: #94a3b8;">(Amazon, Flipkart, Meesho এক বা একাধিক ফাইল)</div>
+          <input type="file" id="pdfInput" accept="application/pdf" multiple onchange="processMultiplePDFs(this)">
+        </label>
+      </div>
+
+      <div class="card card-return">
+        <div class="card-title" style="color: #ef4444;">🔄 রিটার্ন পার্সেল এন্ট্রি ও আন-মার্ক</div>
+        <label class="upload-box" for="returnPdfInput" style="border-color: #ef4444; background: rgba(239, 68, 68, 0.04);">
+          <div style="font-size: 24px;">📥</div>
+          <div style="font-size: 13px; font-weight: bold; margin-top: 4px;">রিটার্ন স্লিপের PDF দিন</div>
+          <div style="font-size: 11px; color: #ef4444;">(রিটার্ন স্লিপ ফাইল থাকলে)</div>
+          <input type="file" id="returnPdfInput" accept="application/pdf" multiple onchange="processReturnPDFs(this)">
+        </label>
+
+        <!-- বারকোড স্ক্যানার বাটন -->
+        <button class="btn-cam-scan" onclick="toggleCameraScanner()">📷 ক্যামেরা দিয়ে বারকোড স্ক্যান করুন</button>
+        <div id="scanner-box">
+          <div id="scanner-preview"></div>
+          <button style="margin-top:6px; background:#475569; color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;" onclick="stopCameraScanner()">স্ক্যানার বন্ধ করুন</button>
+        </div>
+
+        <div class="return-input-group">
+          <input type="text" id="manualReturnId" placeholder="Order ID বা Tracking ID লিখুন...">
+          <button class="btn-return-mark" onclick="handleManualReturn()">রিটার্ন মার্ক</button>
+          <button class="btn-return-unmark" onclick="handleManualUnreturn()" title="ভুল করে রিটার্ন হলে স্বাভাবিক অবস্থায় ফেরান">↩️ রিটার্ন বাতিল</button>
+        </div>
+      </div>
     </div>
 
-    <!-- ডিসপ্যাচ কার্ড -->
-    <div class="card card-dispatch">
-        <div class="card-title blue">📦 ডিসপ্যাচ অর্ডার (শিপিং লেবেল)</div>
-        <div class="upload-area" onclick="document.getElementById('dispatchFileInput').click()">
-            <input type="file" id="dispatchFileInput" accept=".pdf" multiple onchange="processPDF(event, 'dispatch')">
-            <div class="upload-icon">📄</div>
-            <div class="upload-text">শিপিং লেবেল PDF বেছে নিন</div>
-            <div class="upload-sub">(Amazon, Flipkart, Meesho এক বা একাধিক ফাইল)</div>
-        </div>
+    <div class="status-bar" id="statusBox"></div>
+
+    <div class="controls">
+      <button class="action-btn btn-save" id="saveBtn" onclick="manualSaveToMemory()">💾 মেমরিতে সেভ করুন</button>
+      <button class="action-btn btn-export" id="exportBtn" onclick="exportToCSV()">📥 সব অর্ডারের Excel (CSV) ডাউনলোড</button>
+      <button class="action-btn btn-remove-dup" id="removeDupBtn" onclick="removeOnlyDuplicates()">🧹 ডুপ্লিকেট মুছুন</button>
+      <button class="action-btn btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️ সব মুছুন</button>
     </div>
 
-    <!-- রিটার্ন ও স্ক্যান কার্ড -->
-    <div class="card card-return">
-        <div class="card-title red">🔄 রিটার্ন পার্সেল এন্ট্রি ও স্ক্যানার</div>
-        <div class="upload-area return-border" onclick="document.getElementById('returnFileInput').click()">
-            <input type="file" id="returnFileInput" accept=".pdf" multiple onchange="processPDF(event, 'return')">
-            <div class="upload-icon">📥</div>
-            <div class="upload-text">রিটার্ন স্লিপের PDF দিন</div>
-            <div class="upload-sub">(রিটার্ন স্লিপ ফাইল থাকলে)</div>
-        </div>
-
-        <!-- ক্যামেরা দিয়ে স্ক্যান বাটন -->
-        <button class="btn btn-scan" id="startScanBtn" onclick="toggleCameraScanner()">📷 ক্যামেরা দিয়ে বারকোড স্ক্যান করুন</button>
-
-        <div id="scanner-container">
-            <div id="scanner-view"></div>
-            <button class="btn btn-gray" style="width: 100%; margin-top: 8px;" onclick="stopCameraScanner()">স্ক্যানার বন্ধ করুন</button>
-        </div>
-
-        <div class="input-group">
-            <input type="text" id="manualTrackingInput" class="text-input" placeholder="Order ID বা Tracking নম্বর">
-            <button class="btn btn-red" onclick="handleManualMark(true)">রিটার্ন মার্ক</button>
-        </div>
-
-        <div style="margin-top: 8px;">
-            <button class="btn btn-gray" style="width: 100%;" onclick="handleManualMark(false)">↩️ রিটার্ন বাতিল (Unmark)</button>
-        </div>
+    <div class="search-container" id="searchContainer">
+      <input type="text" id="searchInput" class="search-box" placeholder="🔍 যে কোনো Order ID বা Tracking ID লিখে বা পেস্ট করে খুঁজুন..." oninput="handleSearch()">
     </div>
 
-    <!-- ডেটা সেকশন -->
-    <div class="card">
-        <div class="stats-grid">
-            <div class="stat-card stat-total">
-                <span class="val" id="statTotal">0</span>
-                <span class="lbl">মোট অর্ডার</span>
-            </div>
-            <div class="stat-card stat-dispatch">
-                <span class="val" id="statDispatched">0</span>
-                <span class="lbl">ডিসপ্যাচ</span>
-            </div>
-            <div class="stat-card stat-return">
-                <span class="val" id="statReturned">0</span>
-                <span class="lbl">রিটার্ন</span>
-            </div>
-        </div>
-
-        <input type="text" id="searchInput" class="search-box" placeholder="🔍 সার্চ করুন (Order ID বা Tracking)..." oninput="renderTable()">
-
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>অর্ডার ID / Tracking</th>
-                        <th>প্ল্যাটফর্ম</th>
-                        <th>স্ট্যাটাস</th>
-                        <th style="text-align: center;">অ্যাকশন</th>
-                    </tr>
-                </thead>
-                <tbody id="tableBody"></tbody>
-            </table>
-        </div>
-
-        <button class="btn btn-green" onclick="exportDataToCSV(false)">📥 এক্সেল ফাইল ডাউনলোড (CSV)</button>
-        <button class="btn btn-clear" onclick="safeDeleteAllData()">⚠️ সম্পূর্ণ ডেটা মুছে ফেলুন</button>
+    <div class="results" id="resultsBox" style="display:none;">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>স্ট্যাটাস (ক্লিক করে বদলান)</th>
+            <th>তারিখ</th>
+            <th>প্ল্যাটফর্ম</th>
+            <th>কুরিয়ার পার্টনার</th>
+            <th>অর্ডার আইডি</th>
+            <th>ট্র্যাকিং আইডি (AWB)</th>
+            <th style="text-align:center;">অ্যাকশন</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
     </div>
-</div>
+  </div>
 
-<div id="toast">✓ স্বয়ংক্রিয়ভাবে সেভ হয়েছে!</div>
+  <canvas id="hiddenCanvas" style="display:none;"></canvas>
+  <canvas id="cropCanvas" style="display:none;"></canvas>
 
-<script>
-    let orderStore = JSON.parse(localStorage.getItem('nxt_dispatch_db')) || [];
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+    let extractedData = JSON.parse(localStorage.getItem('my_orders_db') || '[]');
+    let ocrWorker = null;
     let html5QrScanner = null;
 
-    function showAutoSaveNotification(msg = "✓ স্বয়ংক্রিয়ভাবে সেভ হয়েছে!") {
-        const toast = document.getElementById("toast");
-        toast.innerText = msg;
-        toast.style.display = "block";
-        setTimeout(() => { toast.style.display = "none"; }, 2000);
+    async function initOCR() {
+      if (!ocrWorker) {
+        ocrWorker = await Tesseract.createWorker('eng');
+      }
+      return ocrWorker;
     }
 
-    // ১. সম্পূর্ণ অটো-সেভ ও নীরব এক্সেল আপডেট
-    function persistData(isSilentExport = true) {
-        localStorage.setItem('nxt_dispatch_db', JSON.stringify(orderStore));
-        renderTable();
-        showAutoSaveNotification();
+    const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
+    const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
+    const meeshoOrderRegex   = /\b\d{16,20}_\d+\b/;
 
-        if (isSilentExport && orderStore.length > 0) {
-            exportDataToCSV(true);
-        }
+    function extractDate(text) {
+      const dMatch = text.match(/\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4})\b/);
+      if (dMatch) return dMatch[1];
+      return new Date().toISOString().slice(0,10);
     }
 
-    // ২. বারকোড / কিউআর কোড ক্যামেরা স্ক্যানার লজিক
-    function toggleCameraScanner() {
-        const container = document.getElementById("scanner-container");
-        if (container.style.display === "block") {
-            stopCameraScanner();
-            return;
+    function getTrackingUrl(courier, trackingId) {
+      if (!trackingId || trackingId === "নেই") return null;
+      const cleanAwb = encodeURIComponent(trackingId.trim());
+
+      if (courier.includes("Shadowfax") || cleanAwb.startsWith("SF")) {
+        return `https://tracker.shadowfax.in/#/track/${cleanAwb}`;
+      } else if (courier.includes("Delhivery")) {
+        return `https://www.delhivery.com/track/package/${cleanAwb}`;
+      } else if (courier.includes("Xpressbees")) {
+        return `https://www.xpressbees.com/shipment/tracking?awb=${cleanAwb}`;
+      } else if (courier.includes("Ekart")) {
+        return `https://ekartlogistics.com/shipmenttrack/${cleanAwb}`;
+      } else if (courier.includes("Amazon")) {
+        return `https://track.amazon.in/tracking/${cleanAwb}`;
+      } else if (courier.includes("Ecom Express")) {
+        return `https://ecomexpress.in/tracking/?awb_number=${cleanAwb}`;
+      }
+      return `https://www.google.com/search?q=${cleanAwb}+tracking`;
+    }
+
+    async function extractAmazonAWBFromImage(page) {
+      try {
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.getElementById('hiddenCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+        const cropCanvas = document.getElementById('cropCanvas');
+        cropCanvas.width = canvas.width * 0.55;
+        cropCanvas.height = canvas.height * 0.22;
+        const cropCtx = cropCanvas.getContext('2d');
+        cropCtx.drawImage(canvas, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
+
+        const worker = await initOCR();
+        const ret = await worker.recognize(cropCanvas);
+        const ocrText = ret.data.text;
+
+        const match = ocrText.match(/AWB\s*([0-9]{10,14})/i) || ocrText.match(/\b(37[0-9]{10})\b/);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
+      } catch (err) {
+        console.error("OCR Error:", err);
+      }
+      return null;
+    }
+
+    function detectCourier(text, trackingId, platform) {
+      if (/Delhivery/i.test(text)) return "Delhivery";
+      if (/Xpress\s*bees|Xpressbees|\bXB\b/i.test(text)) return "Xpressbees";
+      if (/Shadowfax|dowfax/i.test(text) || trackingId.toUpperCase().startsWith("SF")) return "Shadowfax";
+      if (platform === "Amazon" || /ATSPL|ATS|Amazon\s*Shipping/i.test(text)) return "Amazon Shipping (ATS)";
+      if (/Ekart|eKart/i.test(text) || trackingId.startsWith("FMPC") || trackingId.startsWith("FMPP")) return "Ekart";
+      if (/Ecom\s*Express/i.test(text)) return "Ecom Express";
+
+      if (trackingId.startsWith("1340")) return "Xpressbees";
+      if (/^(12|13|14|33|37)\d{10,14}$/.test(trackingId)) {
+        return platform === "Amazon" ? "Amazon Shipping (ATS)" : "Delhivery";
+      }
+
+      return "অন্যান্য";
+    }
+
+    function findTrackingNumber(text, rawOrderId, platform) {
+      const pureOrderId = rawOrderId.replace(/_\d+$/, '');
+
+      const sfDirect = text.match(/\bSF\s*([0-9]{8,14}\s*[A-Z]{0,5})\b/i);
+      if (sfDirect && sfDirect[1]) {
+        return ("SF" + sfDirect[1].replace(/\s+/g, '')).toUpperCase();
+      }
+
+      const amzAwbDirect = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
+      if (amzAwbDirect && amzAwbDirect[1]) return amzAwbDirect[1].trim();
+
+      const tagMatch = text.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{10,22})/i);
+      if (tagMatch && tagMatch[1]) {
+        let cleanTagVal = tagMatch[1].trim();
+        if (!cleanTagVal.includes(pureOrderId)) return cleanTagVal;
+      }
+
+      const ekartMatch = text.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+)\b/i);
+      if (ekartMatch) return ekartMatch[0].trim();
+
+      const allNumbers = text.match(/\b\d{12,16}\b/g) || [];
+      for (let num of allNumbers) {
+        let clean = num.trim();
+        if (clean !== pureOrderId && !clean.startsWith("2026") && !clean.startsWith("2025") && !clean.startsWith("19") && !clean.startsWith("3329")) {
+          return clean;
+        }
+      }
+
+      const tenDigitNumbers = text.match(/\b\d{10,11}\b/g) || [];
+      for (let num of tenDigitNumbers) {
+        let clean = num.trim();
+        if (clean !== pureOrderId && !clean.startsWith("91") && !clean.startsWith("202")) return clean;
+      }
+
+      return "নেই";
+    }
+
+    function refreshDuplicateStatus() {
+      const seen = new Set();
+      let dupCount = 0;
+      extractedData.forEach(item => {
+        if (item.status === "Returned") return;
+        if (seen.has(item.orderId)) {
+          item.status = "Duplicate";
+          dupCount++;
+        } else {
+          item.status = "Unique";
+          seen.add(item.orderId);
+        }
+      });
+      return dupCount;
+    }
+
+    // সম্পূর্ণ নীরব অটো-সেভ (ডাউনলোড জ্যাম ছাড়া কেবল লোকাল মেমরিতে সেভ)
+    function autoSaveAndSync() {
+      localStorage.setItem('my_orders_db', JSON.stringify(extractedData));
+    }
+
+    function manualSaveToMemory() {
+      autoSaveAndSync();
+      const statusBox = document.getElementById('statusBox');
+      statusBox.innerHTML = `💾 <b>সফলভাবে ব্রাউজার মেমরিতে সেভ হয়েছে!</b> (মোট সংরক্ষিত: ${extractedData.length} টি)`;
+      statusBox.style.color = '#10b981';
+      setTimeout(() => { 
+        statusBox.style.color = '#38bdf8'; 
+        updateUI(refreshDuplicateStatus());
+      }, 2500);
+    }
+
+    async function processMultiplePDFs(input) {
+      const files = input.files;
+      if (!files || files.length === 0) return;
+
+      const statusBox = document.getElementById('statusBox');
+      statusBox.innerHTML = `⏳ মোট ${files.length} টি ফাইল প্রসেস করা হচ্ছে...`;
+
+      let beforeCount = extractedData.length;
+
+      for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+        const file = files[fileIndex];
+        statusBox.innerHTML = `⏳ ফাইল (${fileIndex + 1}/${files.length}) প্রসেস হচ্ছে: <b>${file.name}</b>`;
+
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          const totalPages = pdf.numPages;
+
+          let pendingAmazonAWB = "";
+
+          for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+            statusBox.innerHTML = `⏳ প্রসেস হচ্ছে: পাতা ${pageNum} / ${totalPages}`;
+            const page = await pdf.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
+            const pageText = items.join(' ');
+
+            if (items.length === 0 || pageText.includes("AWB") || pageText.length < 50) {
+              let awb = await extractAmazonAWBFromImage(page);
+              if (awb) pendingAmazonAWB = awb;
+            }
+
+            let platform = "অন্যান্য";
+            let orderId = "";
+
+            if (flipkartOrderRegex.test(pageText)) {
+              platform = "Flipkart";
+              orderId = pageText.match(flipkartOrderRegex)[0];
+            } else if (amazonOrderRegex.test(pageText)) {
+              platform = "Amazon";
+              orderId = pageText.match(amazonOrderRegex)[0];
+            } else if (meeshoOrderRegex.test(pageText)) {
+              platform = "Meesho";
+              orderId = pageText.match(meeshoOrderRegex)[0];
+            }
+
+            if (orderId) {
+              let trackingId = findTrackingNumber(pageText, orderId, platform);
+              
+              if ((trackingId === "নেই" || platform === "Amazon") && pendingAmazonAWB) {
+                trackingId = pendingAmazonAWB;
+              }
+
+              let courier = detectCourier(pageText, trackingId, platform);
+              let orderDate = extractDate(pageText);
+
+              extractedData.push({
+                date: orderDate,
+                platform: platform,
+                courier: courier,
+                orderId: orderId,
+                trackingId: trackingId,
+                status: "Unique"
+              });
+
+              pendingAmazonAWB = "";
+            }
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      let addedCount = extractedData.length - beforeCount;
+      const duplicateCount = refreshDuplicateStatus();
+      autoSaveAndSync(); // স্বয়ংক্রিয় সেভ
+      updateUI(duplicateCount, addedCount);
+      input.value = '';
+    }
+
+    async function processReturnPDFs(input) {
+      const files = input.files;
+      if (!files || files.length === 0) return;
+
+      const statusBox = document.getElementById('statusBox');
+      statusBox.innerHTML = `⏳ রিটার্ন স্লিপ প্রসেস করা হচ্ছে...`;
+
+      let markedCount = 0;
+
+      for (let file of files) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          for (let p = 1; p <= pdf.numPages; p++) {
+            const page = await pdf.getPage(p);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(i => i.str).join(' ');
+
+            extractedData.forEach(item => {
+              if (pageText.includes(item.orderId) || (item.trackingId !== "নেই" && pageText.includes(item.trackingId))) {
+                item.status = "Returned";
+                markedCount++;
+              }
+            });
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      autoSaveAndSync();
+      updateUI(refreshDuplicateStatus());
+      statusBox.innerHTML = `✅ মোট <b>${markedCount}</b> টি পার্সেল রিটার্ন চিহ্নিত ও অটো-সেভ হয়েছে!`;
+      input.value = '';
+    }
+
+    function handleManualReturn() {
+      const input = document.getElementById('manualReturnId');
+      const val = input.value.trim();
+      if (!val) return;
+      markAsReturned(val);
+      input.value = '';
+    }
+
+    function handleManualUnreturn() {
+      const input = document.getElementById('manualReturnId');
+      const val = input.value.trim();
+      if (!val) return;
+      unmarkReturn(val);
+      input.value = '';
+    }
+
+    function markAsReturned(searchKey) {
+      let found = false;
+      extractedData.forEach(item => {
+        if (item.orderId.toLowerCase() === searchKey.toLowerCase() || 
+           (item.trackingId !== "নেই" && item.trackingId.toLowerCase() === searchKey.toLowerCase())) {
+          item.status = "Returned";
+          found = true;
+        }
+      });
+
+      if (!found) {
+        let pForm = "অন্যান্য";
+        let cName = "অন্যান্য";
+
+        if (amazonOrderRegex.test(searchKey)) {
+          pForm = "Amazon";
+          cName = "Amazon Shipping (ATS)";
+        } else if (flipkartOrderRegex.test(searchKey)) {
+          pForm = "Flipkart";
+          cName = "Ekart";
+        } else if (meeshoOrderRegex.test(searchKey)) {
+          pForm = "Meesho";
+          cName = "Shadowfax / Delhivery / Xpressbees";
         }
 
-        container.style.display = "block";
-        html5QrScanner = new Html5Qrcode("scanner-view");
-
-        const config = { fps: 10, qrbox: { width: 250, height: 150 } };
-
-        html5QrScanner.start(
-            { facingMode: "environment" },
-            config,
-            (decodedText) => {
-                // স্ক্যান হওয়া মাত্রই সাউন্ড বা ভাইব্রেশন দিয়ে এন্ট্রি
-                if (navigator.vibrate) navigator.vibrate(100);
-                document.getElementById("manualTrackingInput").value = decodedText;
-                handleManualMark(true); // স্বয়ংক্রিয় রিটার্ন মার্ক
-                stopCameraScanner();
-                showAutoSaveNotification("✓ স্ক্যান সফল: " + decodedText);
-            },
-            (errorMessage) => {}
-        ).catch((err) => {
-            alert("ক্যামেরা চালু করা সম্ভব হয়নি। অ্যাপের ক্যামেরা পারমিশন দেওয়া আছে কি না দেখুন।");
-            stopCameraScanner();
+        extractedData.unshift({
+          date: new Date().toISOString().slice(0,10),
+          platform: pForm,
+          courier: cName,
+          orderId: searchKey,
+          trackingId: "নেই",
+          status: "Returned"
         });
+      }
+
+      autoSaveAndSync();
+      updateUI(refreshDuplicateStatus());
+      document.getElementById('statusBox').innerHTML = `🔄 <b>${searchKey}</b> লাল রঙে রিটার্ন চিহ্নিত ও অটো-সেভ হয়েছে!`;
+    }
+
+    function unmarkReturn(searchKey) {
+      let found = false;
+      extractedData.forEach(item => {
+        if (item.orderId.toLowerCase() === searchKey.toLowerCase() || 
+           (item.trackingId !== "নেই" && item.trackingId.toLowerCase() === searchKey.toLowerCase())) {
+          item.status = "Unique";
+          found = true;
+        }
+      });
+
+      if (found) {
+        autoSaveAndSync();
+        updateUI(refreshDuplicateStatus());
+        document.getElementById('statusBox').innerHTML = `↩️ <b>${searchKey}</b> রিটার্ন বাতিল করে সাধারণ অবস্থায় ফেরানো হয়েছে!`;
+      }
+    }
+
+    // লাইভ ক্যামেরা বারকোড স্ক্যানার
+    function toggleCameraScanner() {
+      const box = document.getElementById("scanner-box");
+      if (box.style.display === "block") {
+        stopCameraScanner();
+        return;
+      }
+      box.style.display = "block";
+      html5QrScanner = new Html5Qrcode("scanner-preview");
+
+      html5QrScanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 140 } },
+        (decodedText) => {
+          if (navigator.vibrate) navigator.vibrate(100);
+          stopCameraScanner();
+          markAsReturned(decodedText.trim());
+        },
+        () => {}
+      ).catch(() => {
+        alert("ক্যামেরা অন করা যায়নি। ক্যামেরার পারমিশন দেওয়া আছে কি না নিশ্চিত করুন।");
+        stopCameraScanner();
+      });
     }
 
     function stopCameraScanner() {
-        if (html5QrScanner) {
-            html5QrScanner.stop().then(() => {
-                html5QrScanner.clear();
-                document.getElementById("scanner-container").style.display = "none";
-            }).catch(() => {
-                document.getElementById("scanner-container").style.display = "none";
-            });
+      if (html5QrScanner) {
+        html5QrScanner.stop().then(() => {
+          html5QrScanner.clear();
+          document.getElementById("scanner-box").style.display = "none";
+        }).catch(() => {
+          document.getElementById("scanner-box").style.display = "none";
+        });
+      } else {
+        document.getElementById("scanner-box").style.display = "none";
+      }
+    }
+
+    function toggleRowStatus(index) {
+      if (extractedData[index].status === "Returned") {
+        extractedData[index].status = "Unique";
+      } else {
+        extractedData[index].status = "Returned";
+      }
+      autoSaveAndSync();
+      updateUI(refreshDuplicateStatus());
+    }
+
+    function deleteRow(index) {
+      extractedData.splice(index, 1);
+      autoSaveAndSync();
+      updateUI(refreshDuplicateStatus());
+    }
+
+    function removeOnlyDuplicates() {
+      const seen = new Set();
+      const uniqueList = [];
+      let removedCount = 0;
+
+      extractedData.forEach(item => {
+        if (item.status === "Returned") {
+          uniqueList.push(item);
+        } else if (!seen.has(item.orderId)) {
+          seen.add(item.orderId);
+          uniqueList.push(item);
         } else {
-            document.getElementById("scanner-container").style.display = "none";
+          removedCount++;
         }
+      });
+
+      extractedData = uniqueList;
+      autoSaveAndSync();
+      updateUI(0);
+      alert(`মোট ${removedCount} টি ডুপ্লিকেট অর্ডার মুছে ফেলা হয়েছে!`);
     }
 
-    // ৩. PDF পার্সিং (Amazon, Flipkart, Meesho)
-    async function processPDF(event, mode) {
-        const files = event.target.files;
-        if (!files || files.length === 0) return;
+    // সুরক্ষিত মুছে ফেলুন (Safe Delete Confirmation)
+    function clearData() {
+      const sure = confirm("⚠️ সতর্কতা!\nআপনি কি নিশ্চিতভাবে সমস্ত সংরক্ষিত ডেটা সম্পূর্ণ মুছে ফেলতে চান?\nএকবার মুছে ফেললে এটি আর ফিরিয়ে আনা সম্ভব হবে না।");
+      if (sure) {
+        extractedData = [];
+        localStorage.removeItem('my_orders_db');
+        updateUI(0);
+        document.getElementById('statusBox').innerHTML = `🗑️ সমস্ত ডেটা মুছে ফেলা হয়েছে।`;
+      }
+    }
 
-        let addedOrUpdated = false;
+    // ব্যবহারকারী যখন বোতাম চাপবেন তখন একক ফ্রেশ এক্সেল ডাউনলোড
+    function exportToCSV() {
+      if (extractedData.length === 0) {
+        alert("ডাউনলোড করার মতো কোনো ডেটা নেই!");
+        return;
+      }
+      let csv = "\uFEFFতারিখ,প্ল্যাটফর্ম,কুরিয়ার পার্টনার,অর্ডার আইডি,ট্র্যাকিং আইডি,স্ট্যাটাস\n";
+      extractedData.forEach(row => {
+        csv += `"${row.date}","${row.platform}","${row.courier}","${row.orderId}","${row.trackingId}","${row.status}"\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Orders_Report_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
 
-        for (let file of files) {
-            try {
-                const buffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-                let fullText = "";
+    function handleSearch() {
+      const query = document.getElementById('searchInput').value.trim().toLowerCase();
+      renderTable(query);
+    }
 
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const content = await page.getTextContent();
-                    fullText += content.items.map(item => item.str).join(" ") + " ";
-                }
+    function renderTable(filterQuery = "") {
+      const tableBody = document.getElementById('tableBody');
+      tableBody.innerHTML = '';
 
-                const regex = /\b(FMPC\d+|OD\d{16,18}|\d{3}-\d{7}-\d{7}|\d{10,14})\b/g;
-                const matches = fullText.match(regex) || [];
-
-                matches.forEach(id => {
-                    let existing = orderStore.find(o => o.id === id);
-
-                    if (mode === 'dispatch') {
-                        if (!existing) {
-                            let platform = "অন্যান্য";
-                            if (id.includes("-")) platform = "Amazon";
-                            else if (id.startsWith("OD") || id.startsWith("FMPC")) platform = "Flipkart";
-                            else platform = "Meesho";
-
-                            orderStore.unshift({
-                                id: id,
-                                platform: platform,
-                                status: 'Dispatched',
-                                timestamp: new Date().toLocaleDateString('en-GB')
-                            });
-                            addedOrUpdated = true;
-                        }
-                    } else if (mode === 'return') {
-                        if (existing) {
-                            existing.status = 'Returned';
-                            addedOrUpdated = true;
-                        } else {
-                            orderStore.unshift({
-                                id: id,
-                                platform: 'Return Slip',
-                                status: 'Returned',
-                                timestamp: new Date().toLocaleDateString('en-GB')
-                            });
-                            addedOrUpdated = true;
-                        }
-                    }
-                });
-            } catch (err) {
-                console.error("PDF Read Error:", err);
-            }
+      extractedData.forEach((item, index) => {
+        if (filterQuery) {
+          const matchOrder = item.orderId.toLowerCase().includes(filterQuery);
+          const matchTrack = item.trackingId.toLowerCase().includes(filterQuery);
+          if (!matchOrder && !matchTrack) return;
         }
 
-        event.target.value = "";
-        if (addedOrUpdated) {
-            persistData(true);
-        }
-    }
+        const tr = document.createElement('tr');
+        if (item.status === "Returned") tr.className = 'row-returned';
 
-    function handleManualMark(isReturn) {
-        const input = document.getElementById("manualTrackingInput");
-        const val = input.value.trim();
-        if (!val) return;
-
-        let found = orderStore.find(o => o.id === val);
-        if (found) {
-            found.status = isReturn ? 'Returned' : 'Dispatched';
-        } else if (isReturn) {
-            orderStore.unshift({
-                id: val,
-                platform: 'Manual/Scan',
-                status: 'Returned',
-                timestamp: new Date().toLocaleDateString('en-GB')
-            });
+        let badgeHtml = '';
+        if (item.status === 'Returned') {
+          badgeHtml = `<span class="badge-returned" onclick="toggleRowStatus(${index})" title="ক্লিক করে আনমার্ক করুন">🔴 RETURNED ↩️</span>`;
+        } else if (item.status === 'Duplicate') {
+          badgeHtml = `<span class="badge-duplicate">DUPLICATE</span>`;
+        } else {
+          badgeHtml = `<span class="badge-unique" onclick="toggleRowStatus(${index})" title="ক্লিক করে রিটার্ন মার্ক করুন">🟢 UNIQUE</span>`;
         }
 
-        input.value = "";
-        persistData(true);
-    }
-
-    // ৪. সেফ ডিলিট কনফার্মেশন
-    function safeDeleteAllData() {
-        const answer = confirm("⚠️ সতর্কতা!\nআপনি কি নিশ্চিতভাবে সমস্ত সংরক্ষিত ডেটা সম্পূর্ণ মুছে ফেলতে চান?\nমুছে ফেললে এটি আর ফিরিয়ে আনা যাবে না।");
-        if (answer) {
-            orderStore = [];
-            persistData(false);
-            showAutoSaveNotification("সব ডেটা মুছে ফেলা হয়েছে");
-        }
-    }
-
-    function deleteSingleItem(id) {
-        orderStore = orderStore.filter(o => o.id !== id);
-        persistData(false);
-    }
-
-    // ৫. এক্সেল / CSV ডাউনলোড
-    function exportDataToCSV(isAuto = false) {
-        if (orderStore.length === 0) {
-            if (!isAuto) alert("ডাউনলোড করার জন্য কোনো ডেটা নেই!");
-            return;
+        let trackingHtml = item.trackingId;
+        const trackUrl = getTrackingUrl(item.courier, item.trackingId);
+        if (trackUrl) {
+          trackingHtml = `<a class="track-link" href="${trackUrl}" target="_blank">${item.trackingId} 🔗</a>`;
         }
 
-        let csv = "\uFEFFঅর্ডার ID,প্ল্যাটফর্ম,স্ট্যাটাস,তারিখ\n";
-        orderStore.forEach(row => {
-            csv += `"${row.id}","${row.platform}","${row.status}","${row.timestamp}"\n`;
-        });
-
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `NXT_Orders_${new Date().toISOString().slice(0,10)}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        tr.innerHTML = `
+          <td>${index + 1}</td>
+          <td>${badgeHtml}</td>
+          <td>${item.date}</td>
+          <td><b>${item.platform}</b></td>
+          <td>${item.courier}</td>
+          <td style="font-weight:bold;">${item.orderId}</td>
+          <td>${trackingHtml}</td>
+          <td style="text-align:center;">
+            <button class="btn-del-row" onclick="deleteRow(${index})" title="এই রো মুছুন">❌</button>
+          </td>
+        `;
+        tableBody.appendChild(tr);
+      });
     }
 
-    function renderTable() {
-        const tbody = document.getElementById("tableBody");
-        const searchVal = (document.getElementById("searchInput").value || "").toLowerCase();
-        tbody.innerHTML = "";
+    function updateUI(duplicateCount = 0, addedCount = null) {
+      const hasData = extractedData.length > 0;
 
-        let total = orderStore.length;
-        let returned = 0;
+      document.getElementById('saveBtn').style.display = hasData ? 'inline-block' : 'none';
+      document.getElementById('exportBtn').style.display = hasData ? 'inline-block' : 'none';
+      document.getElementById('removeDupBtn').style.display = (hasData && duplicateCount > 0) ? 'inline-block' : 'none';
+      document.getElementById('clearBtn').style.display = hasData ? 'inline-block' : 'none';
+      document.getElementById('searchContainer').style.display = hasData ? 'block' : 'none';
+      document.getElementById('resultsBox').style.display = hasData ? 'block' : 'none';
 
-        orderStore.forEach(item => {
-            if (item.status === 'Returned') returned++;
+      let returnedCount = extractedData.filter(i => i.status === "Returned").length;
+      let uniqueCount = extractedData.length - duplicateCount - returnedCount;
 
-            if (searchVal && !item.id.toLowerCase().includes(searchVal) && !item.platform.toLowerCase().includes(searchVal)) {
-                return;
-            }
+      let statusMsg = `📊 মোট এন্ট্রি: <b>${extractedData.length}</b> টি | ইউনিক: <b>${uniqueCount}</b> টি | রিটার্ন: <b>${returnedCount}</b> টি | ডুপ্লিকেট: <b>${duplicateCount}</b> টি`;
+      if (addedCount !== null) {
+        statusMsg += ` | <span style="color:#10b981;">(নতুন যোগ হয়েছে: ${addedCount} টি)</span>`;
+      }
+      document.getElementById('statusBox').innerHTML = statusMsg;
 
-            const tr = document.createElement("tr");
-            const isRet = item.status === 'Returned';
-            tr.innerHTML = `
-                <td>
-                    <strong>${item.id}</strong><br>
-                    <small style="color:var(--text-muted); font-size:10px;">${item.timestamp}</small>
-                </td>
-                <td>${item.platform}</td>
-                <td><span class="tag ${isRet ? 'tag-returned' : 'tag-dispatched'}">${isRet ? 'Returned' : 'Dispatched'}</span></td>
-                <td style="text-align:center;">
-                    <span class="btn-del-single" title="মুছে ফেলুন" onclick="deleteSingleItem('${item.id}')">✕</span>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-
-        document.getElementById("statTotal").innerText = total;
-        document.getElementById("statDispatched").innerText = total - returned;
-        document.getElementById("statReturned").innerText = returned;
+      renderTable();
     }
 
-    renderTable();
-</script>
-
+    // পূর্বের ডেটা লোড
+    updateUI(refreshDuplicateStatus());
+  </script>
 </body>
 </html>
