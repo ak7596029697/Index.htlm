@@ -56,10 +56,10 @@
     .badge-unique { background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; cursor: pointer; }
     .badge-duplicate { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; }
     
-    /* রিটার্ন অর্ডারের সম্পূর্ণ লালচে স্টাইল ও ক্লিকেবল টগল */
+    /* রিটার্ন অর্ডারের সম্পূর্ণ লালচে স্টাইল */
     .badge-returned { background: #ef4444; color: #ffffff; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
     .badge-returned:hover { background: #dc2626; }
-    .row-returned { background: rgba(239, 68, 68, 0.18) !important; border-left: 5px solid #ef4444; }
+    .row-returned { background: rgba(239, 68, 68, 0.22) !important; border-left: 5px solid #ef4444; }
     .row-returned td { color: #fca5a5 !important; }
 
     .btn-del-row { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 14px; padding: 2px 6px; }
@@ -211,6 +211,7 @@
       return null;
     }
 
+    // নিখুঁত কুরিয়ার শনাক্তকরণ (আপনার যাচাইকৃত লজিক)
     function detectCourier(text, trackingId, platform) {
       if (/Delhivery/i.test(text)) return "Delhivery";
       if (/Xpress\s*bees|Xpressbees|\bXB\b/i.test(text)) return "Xpressbees";
@@ -227,26 +228,32 @@
       return "অন্যান্য";
     }
 
+    // নিখুঁত ট্র্যাকিং আইডি বের করার ফাংশন (Delhivery, Xpressbees, Shadowfax ও Amazon)
     function findTrackingNumber(text, rawOrderId, platform) {
       const pureOrderId = rawOrderId.replace(/_\d+$/, '');
 
+      // ১. Shadowfax সরাসরি রিড
       const sfDirect = text.match(/\bSF\s*([0-9]{8,14}\s*[A-Z]{0,5})\b/i);
       if (sfDirect && sfDirect[1]) {
         return ("SF" + sfDirect[1].replace(/\s+/g, '')).toUpperCase();
       }
 
+      // ২. Amazon AWB সরাসরি রিড
       const amzAwbDirect = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
       if (amzAwbDirect && amzAwbDirect[1]) return amzAwbDirect[1].trim();
 
+      // ৩. সাধারণ ট্যাগ
       const tagMatch = text.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{10,22})/i);
       if (tagMatch && tagMatch[1]) {
         let cleanTagVal = tagMatch[1].trim();
         if (!cleanTagVal.includes(pureOrderId)) return cleanTagVal;
       }
 
+      // ৪. Ekart প্রিফিক্স
       const ekartMatch = text.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+)\b/i);
       if (ekartMatch) return ekartMatch[0].trim();
 
+      // ৫. ১২ থেকে ১৬ ডিজিটের নম্বর খোঁজা
       const allNumbers = text.match(/\b\d{12,16}\b/g) || [];
       for (let num of allNumbers) {
         let clean = num.trim();
@@ -255,6 +262,7 @@
         }
       }
 
+      // ৬. ১০ থেকে ১১ ডিজিটের নম্বর
       const tenDigitNumbers = text.match(/\b\d{10,11}\b/g) || [];
       for (let num of tenDigitNumbers) {
         let clean = num.trim();
@@ -370,7 +378,6 @@
       input.value = '';
     }
 
-    // রিটার্ন মার্ক হ্যান্ডলার
     function handleManualReturn() {
       const input = document.getElementById('manualReturnId');
       const val = input.value.trim();
@@ -379,7 +386,6 @@
       input.value = '';
     }
 
-    // রিটার্ন বাতিল (Unmark) হ্যান্ডলার
     function handleManualUnreturn() {
       const input = document.getElementById('manualReturnId');
       const val = input.value.trim();
@@ -427,7 +433,6 @@
       document.getElementById('statusBox').innerHTML = `🔄 <b>${searchKey}</b> লাল রঙে রিটার্ন চিহ্নিত হয়েছে! সেভ রাখতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
     }
 
-    // ভুল করে রিটার্ন হলে তা স্বাভাবিক অবস্থায় ফেরানোর ফাংশন
     function unmarkReturn(searchKey) {
       let found = false;
       extractedData.forEach(item => {
@@ -440,4 +445,194 @@
 
       if (found) {
         updateUI(refreshDuplicateStatus());
-        document.getElementById('statusBox').innerHTML = `↩️ <b>${searchKey}</b> রিটার্ন বাতিল করে সাধারণ অর্ডারে ফেরানো হয়েছে! সেভ করতে <b>"💾 মেমরিতে সেভ 
+        document.getElementById('statusBox').innerHTML = `↩️ <b>${searchKey}</b> রিটার্ন বাতিল করে সাধারণ অর্ডারে ফেরানো হয়েছে! সেভ করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
+      } else {
+        document.getElementById('statusBox').innerHTML = `❌ তালিকার মধ্যে এই আইডিটি পাওয়া যায়নি!`;
+      }
+    }
+
+    function toggleReturnStatus(index) {
+      if (extractedData[index].status === 'Returned') {
+        extractedData[index].status = 'Unique';
+        document.getElementById('statusBox').innerHTML = `↩️ অর্ডারটি সাধারণ ডেলিভারি হিসেবে ফিরিয়ে আনা হয়েছে। সেভ করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
+      } else {
+        extractedData[index].status = 'Returned';
+        document.getElementById('statusBox').innerHTML = `🔄 অর্ডারটি রিটার্ন হিসেবে চিহ্নিত করা হয়েছে। সেভ করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
+      }
+      updateUI(refreshDuplicateStatus());
+    }
+
+    async function processReturnPDFs(input) {
+      const files = input.files;
+      if (!files || files.length === 0) return;
+
+      for (let file of files) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str.trim()).join(' ');
+
+            let pForm = "অন্যান্য";
+            let orderId = "";
+            if (amazonOrderRegex.test(pageText)) {
+              pForm = "Amazon";
+              orderId = pageText.match(amazonOrderRegex)[0];
+            } else if (flipkartOrderRegex.test(pageText)) {
+              pForm = "Flipkart";
+              orderId = pageText.match(flipkartOrderRegex)[0];
+            } else if (meeshoOrderRegex.test(pageText)) {
+              pForm = "Meesho";
+              orderId = pageText.match(meeshoOrderRegex)[0];
+            }
+
+            let trackingId = await extractAmazonAWBFromImage(page) || findTrackingNumber(pageText, orderId || "0", pForm);
+
+            if (orderId) markAsReturned(orderId);
+            else if (trackingId !== "নেই") markAsReturned(trackingId);
+          }
+        } catch (e) {}
+      }
+      input.value = '';
+    }
+
+    function removeOnlyDuplicates() {
+      const initialCount = extractedData.length;
+      extractedData = extractedData.filter(item => item.status !== "Duplicate");
+      const removedCount = initialCount - extractedData.length;
+      refreshDuplicateStatus();
+      updateUI(0);
+      document.getElementById('statusBox').innerHTML = `🧹 <b>${removedCount}</b> টি ডুপ্লিকেট মুছে ফেলা হয়েছে! সেভ করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
+    }
+
+    function deleteSingleRow(index) {
+      extractedData.splice(index, 1);
+      const dupCount = refreshDuplicateStatus();
+      updateUI(dupCount);
+      document.getElementById('statusBox').innerHTML = `🗑️ একটি সারি মুছে ফেলা হয়েছে। স্থায়ী করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
+    }
+
+    function updateUI(duplicateCount, newlyAddedCount = 0) {
+      const statusBox = document.getElementById('statusBox');
+      let returnCount = extractedData.filter(d => d.status === "Returned").length;
+      
+      let summaryText = `📦 মোট আছে: <b>${extractedData.length}</b> টি অর্ডার।`;
+      if (newlyAddedCount > 0) {
+        summaryText += ` (📥 নতুন যোগ হয়েছে: <b style="color:#34d399;">${newlyAddedCount}</b> টি)`;
+      }
+      if (duplicateCount > 0) {
+        summaryText += ` (🚫 ডুপ্লিকেট: <b style="color:#f87171;">${duplicateCount}</b> টি)`;
+      }
+      if (returnCount > 0) {
+        summaryText += ` (🔄 রিটার্ন: <b style="color:#ef4444;">${returnCount}</b> টি)`;
+      }
+
+      statusBox.innerHTML = summaryText;
+
+      const show = extractedData.length > 0;
+      document.getElementById('resultsBox').style.display = show ? 'block' : 'none';
+      document.getElementById('saveBtn').style.display = show ? 'block' : 'none';
+      document.getElementById('exportBtn').style.display = show ? 'block' : 'none';
+      document.getElementById('clearBtn').style.display = show ? 'block' : 'none';
+      document.getElementById('searchContainer').style.display = show ? 'block' : 'none';
+      document.getElementById('removeDupBtn').style.display = (show && duplicateCount > 0) ? 'block' : 'none';
+
+      const query = document.getElementById('searchInput') ? document.getElementById('searchInput').value.trim().toLowerCase() : "";
+      renderTable(query);
+    }
+
+    function handleSearch() {
+      const query = document.getElementById('searchInput').value.trim().toLowerCase();
+      renderTable(query);
+    }
+
+    function renderTable(searchQuery = "") {
+      const tableBody = document.getElementById('tableBody');
+      tableBody.innerHTML = '';
+
+      const displayData = extractedData.filter(item => {
+        if (!searchQuery) return true;
+        return item.orderId.toLowerCase().includes(searchQuery) || 
+               (item.trackingId !== "নেই" && item.trackingId.toLowerCase().includes(searchQuery));
+      });
+
+      displayData.forEach((row) => {
+        const originalIndex = extractedData.indexOf(row);
+        const tr = document.createElement('tr');
+        
+        let badgeClass = 'badge-unique';
+        let badgeText = 'ডেলিভারি/প্রসেসিং';
+
+        if (row.status === 'Duplicate') {
+          badgeClass = 'badge-duplicate';
+          badgeText = '🚫 ডুপ্লিকেট';
+        } else if (row.status === 'Returned') {
+          badgeClass = 'badge-returned';
+          badgeText = '🔄 রিটার্ন এসেছে (বাতিল করতে চাপুন)';
+          tr.className = 'row-returned';
+        }
+
+        let trackUrl = getTrackingUrl(row.courier, row.trackingId);
+        let trackingDisplay = row.trackingId;
+
+        if (trackUrl && row.trackingId !== "নেই") {
+          trackingDisplay = `<a class="track-link" href="${trackUrl}" target="_blank" title="ক্লিক করে লাইভ স্ট্যাটাস দেখুন">${row.trackingId} 🔗</a>`;
+        } else if (row.trackingId === "নেই") {
+          trackingDisplay = `<span style="color:#f87171; font-weight:bold;">নেই</span>`;
+        }
+
+        tr.innerHTML = `
+          <td>${originalIndex + 1}</td>
+          <td><span class="${badgeClass}" onclick="toggleReturnStatus(${originalIndex})" title="স্ট্যাটাস পরিবর্তন করতে ক্লিক করুন">${badgeText}</span></td>
+          <td style="color:#94a3b8;">${row.date}</td>
+          <td><b>${row.platform}</b></td>
+          <td><span style="color:#38bdf8; font-weight:bold;">${row.courier}</span></td>
+          <td><b>${row.orderId}</b></td>
+          <td>${trackingDisplay}</td>
+          <td style="text-align:center;">
+            <button class="btn-del-row" onclick="deleteSingleRow(${originalIndex})" title="মুছুন">❌</button>
+          </td>
+        `;
+        tableBody.appendChild(tr);
+      });
+    }
+
+    function exportToCSV() {
+      if (!extractedData.length) return;
+      let csv = "Serial,Status,Date,Platform,Courier Partner,Order ID,Tracking ID\n";
+      extractedData.forEach((r, i) => {
+        csv += `${i + 1},"${r.status}","\t${r.date}","${r.platform}","${r.courier}","\t${r.orderId}","\t${r.trackingId}"\n`;
+      });
+      const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `Orders_Report_${new Date().toISOString().slice(0,10)}.csv`;
+      link.click();
+    }
+
+    function clearData() {
+      if (confirm("আপনি কি নিশ্চিত যে সংরক্ষিত সব তথ্য মুছে ফেলতে চান?")) {
+        extractedData = [];
+        localStorage.removeItem('my_orders_db');
+        document.getElementById('tableBody').innerHTML = '';
+        document.getElementById('resultsBox').style.display = 'none';
+        document.getElementById('saveBtn').style.display = 'none';
+        document.getElementById('exportBtn').style.display = 'none';
+        document.getElementById('removeDupBtn').style.display = 'none';
+        document.getElementById('clearBtn').style.display = 'none';
+        document.getElementById('searchContainer').style.display = 'none';
+        document.getElementById('statusBox').innerHTML = 'সব তথ্য মুছে ফেলা হয়েছে।';
+        document.getElementById('pdfInput').value = '';
+      }
+    }
+
+    window.onload = function() {
+      if (extractedData.length > 0) {
+        updateUI(refreshDuplicateStatus());
+      }
+    };
+  </script>
+</body>
+</html>
