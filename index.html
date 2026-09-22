@@ -20,15 +20,17 @@
     .card { background: #0f172a; border-radius: 8px; padding: 15px; border: 1px solid #334155; }
     .card-title { font-size: 14px; font-weight: bold; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
     .card-dispatch { border-color: #38bdf8; }
-    .card-return { border-color: #f59e0b; }
+    .card-return { border-color: #ef4444; }
 
     .upload-box { border: 2px dashed #475569; border-radius: 6px; padding: 15px; text-align: center; cursor: pointer; background: rgba(255,255,255,0.02); display: block; }
     .upload-box:hover { border-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }
     input[type="file"] { display: none; }
 
-    .return-input-group { display: flex; gap: 8px; margin-top: 10px; }
-    .return-input-group input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; background: #1e293b; color: white; font-family: monospace; font-size: 13px; }
-    .return-input-group button { padding: 8px 14px; border-radius: 6px; border: none; background: #f59e0b; color: #000; font-weight: bold; cursor: pointer; }
+    .return-input-group { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .return-input-group input { flex: 2; min-width: 180px; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; background: #1e293b; color: white; font-family: monospace; font-size: 13px; }
+    .btn-return-mark { padding: 8px 12px; border-radius: 6px; border: none; background: #ef4444; color: #ffffff; font-weight: bold; cursor: pointer; }
+    .btn-return-unmark { padding: 8px 12px; border-radius: 6px; border: none; background: #475569; color: #ffffff; font-weight: bold; cursor: pointer; }
+    .btn-return-unmark:hover { background: #64748b; }
 
     .status-bar { margin-top: 15px; font-size: 14px; text-align: center; font-weight: bold; color: #38bdf8; min-height: 26px; padding: 6px 10px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); }
     .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
@@ -40,16 +42,25 @@
     .btn-remove-dup { background: #64748b; color: white; display: none; flex: 1.5; }
     .btn-clear { background: #ef4444; color: white; display: none; width: 45px; }
 
-    .results { margin-top: 20px; max-height: 480px; overflow-y: auto; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
+    /* সার্চ বক্স */
+    .search-container { margin-top: 18px; display: none; }
+    .search-box { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid #38bdf8; background: #0f172a; color: white; font-size: 13px; font-family: monospace; outline: none; }
+    .search-box:focus { box-shadow: 0 0 10px rgba(56, 189, 248, 0.4); }
+
+    .results { margin-top: 12px; max-height: 480px; overflow-y: auto; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
     th, td { padding: 10px 8px; border-bottom: 1px solid #334155; }
-    th { background: #1e293b; color: #94a3b8; position: sticky; top: 0; }
+    th { background: #1e293b; color: #94a3b8; position: sticky; top: 0; z-index: 10; }
     td { font-family: monospace; }
     
-    .badge-unique { background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; }
+    .badge-unique { background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; cursor: pointer; }
     .badge-duplicate { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; }
-    .badge-returned { background: #f59e0b; color: #000; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; }
-    .row-returned { background: rgba(245, 158, 11, 0.12) !important; border-left: 4px solid #f59e0b; }
+    
+    /* রিটার্ন অর্ডারের সম্পূর্ণ লালচে স্টাইল ও ক্লিকেবল টগল */
+    .badge-returned { background: #ef4444; color: #ffffff; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+    .badge-returned:hover { background: #dc2626; }
+    .row-returned { background: rgba(239, 68, 68, 0.18) !important; border-left: 5px solid #ef4444; }
+    .row-returned td { color: #fca5a5 !important; }
 
     .btn-del-row { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 14px; padding: 2px 6px; }
     .btn-del-row:hover { background: rgba(239, 68, 68, 0.2); border-radius: 4px; }
@@ -76,16 +87,17 @@
       </div>
 
       <div class="card card-return">
-        <div class="card-title" style="color: #f59e0b;">🔄 রিটার্ন পার্সেল এন্ট্রি</div>
-        <label class="upload-box" for="returnPdfInput" style="border-color: #f59e0b; background: rgba(245, 158, 11, 0.04);">
+        <div class="card-title" style="color: #ef4444;">🔄 রিটার্ন পার্সেল এন্ট্রি ও আন-মার্ক</div>
+        <label class="upload-box" for="returnPdfInput" style="border-color: #ef4444; background: rgba(239, 68, 68, 0.04);">
           <div style="font-size: 24px;">📥</div>
           <div style="font-size: 13px; font-weight: bold; margin-top: 4px;">রিটার্ন স্লিপের PDF দিন</div>
-          <div style="font-size: 11px; color: #f59e0b;">(রিটার্ন স্লিপ ফাইল থাকলে)</div>
+          <div style="font-size: 11px; color: #ef4444;">(রিটার্ন স্লিপ ফাইল থাকলে)</div>
           <input type="file" id="returnPdfInput" accept="application/pdf" multiple onchange="processReturnPDFs(this)">
         </label>
         <div class="return-input-group">
-          <input type="text" id="manualReturnId" placeholder="রিটার্ন Order বা Tracking ID লিখুন...">
-          <button onclick="handleManualReturn()">রিটার্ন মার্ক করুন</button>
+          <input type="text" id="manualReturnId" placeholder="Order ID বা Tracking ID লিখুন...">
+          <button class="btn-return-mark" onclick="handleManualReturn()">রিটার্ন মার্ক</button>
+          <button class="btn-return-unmark" onclick="handleManualUnreturn()" title="ভুল করে রিটার্ন হলে স্বাভাবিক অবস্থায় ফেরান">↩️ রিটার্ন বাতিল</button>
         </div>
       </div>
     </div>
@@ -99,12 +111,17 @@
       <button class="action-btn btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️ সব মুছুন</button>
     </div>
 
+    <!-- লাইভ সার্চ বক্স -->
+    <div class="search-container" id="searchContainer">
+      <input type="text" id="searchInput" class="search-box" placeholder="🔍 যে কোনো Order ID বা Tracking ID লিখে বা পেস্ট করে খুঁজুন..." oninput="handleSearch()">
+    </div>
+
     <div class="results" id="resultsBox" style="display:none;">
       <table>
         <thead>
           <tr>
             <th>#</th>
-            <th>স্ট্যাটাস</th>
+            <th>স্ট্যাটাস (ক্লিক করে বদলান)</th>
             <th>তারিখ</th>
             <th>প্ল্যাটফর্ম</th>
             <th>কুরিয়ার পার্টনার</th>
@@ -194,7 +211,6 @@
       return null;
     }
 
-    // কুরিয়ার পার্টনার নির্ভুলভাবে শনাক্তকরণ (নামের ওপর প্রথম অগ্রাধিকার)
     function detectCourier(text, trackingId, platform) {
       if (/Delhivery/i.test(text)) return "Delhivery";
       if (/Xpress\s*bees|Xpressbees|\bXB\b/i.test(text)) return "Xpressbees";
@@ -203,7 +219,6 @@
       if (/Ekart|eKart/i.test(text) || trackingId.startsWith("FMPC") || trackingId.startsWith("FMPP")) return "Ekart";
       if (/Ecom\s*Express/i.test(text)) return "Ecom Express";
 
-      // যদি টেক্সটে নাম না পাওয়া যায় তবে নম্বরের প্রিফিক্স দিয়ে ধরা
       if (trackingId.startsWith("1340")) return "Xpressbees";
       if (/^(12|13|14|33|37)\d{10,14}$/.test(trackingId)) {
         return platform === "Amazon" ? "Amazon Shipping (ATS)" : "Delhivery";
@@ -212,32 +227,26 @@
       return "অন্যান্য";
     }
 
-    // ট্র্যাকিং নম্বর খোঁজার উন্নত লজিক
     function findTrackingNumber(text, rawOrderId, platform) {
       const pureOrderId = rawOrderId.replace(/_\d+$/, '');
 
-      // ১. Shadowfax সরাসরি রিড
       const sfDirect = text.match(/\bSF\s*([0-9]{8,14}\s*[A-Z]{0,5})\b/i);
       if (sfDirect && sfDirect[1]) {
         return ("SF" + sfDirect[1].replace(/\s+/g, '')).toUpperCase();
       }
 
-      // ২. Amazon AWB সরাসরি রিড
       const amzAwbDirect = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
       if (amzAwbDirect && amzAwbDirect[1]) return amzAwbDirect[1].trim();
 
-      // ৩. সাধারণ ট্যাগ (AWB / Tracking / Waybill)
       const tagMatch = text.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{10,22})/i);
       if (tagMatch && tagMatch[1]) {
         let cleanTagVal = tagMatch[1].trim();
         if (!cleanTagVal.includes(pureOrderId)) return cleanTagVal;
       }
 
-      // ৪. Ekart প্রিফিক্স
       const ekartMatch = text.match(/\b(FMPC[A-Z0-9]+|FMPP[A-Z0-9]+)\b/i);
       if (ekartMatch) return ekartMatch[0].trim();
 
-      // ৫. ১২ থেকে ১৬ ডিজিটের নম্বর খোঁজা (অর্ডার আইডি এবং পিনকোড/তারিখ বাদ দিয়ে)
       const allNumbers = text.match(/\b\d{12,16}\b/g) || [];
       for (let num of allNumbers) {
         let clean = num.trim();
@@ -246,7 +255,6 @@
         }
       }
 
-      // ৬. ১০ থেকে ১১ ডিজিটের নম্বর
       const tenDigitNumbers = text.match(/\b\d{10,11}\b/g) || [];
       for (let num of tenDigitNumbers) {
         let clean = num.trim();
@@ -362,11 +370,21 @@
       input.value = '';
     }
 
+    // রিটার্ন মার্ক হ্যান্ডলার
     function handleManualReturn() {
       const input = document.getElementById('manualReturnId');
       const val = input.value.trim();
       if (!val) return;
       markAsReturned(val);
+      input.value = '';
+    }
+
+    // রিটার্ন বাতিল (Unmark) হ্যান্ডলার
+    function handleManualUnreturn() {
+      const input = document.getElementById('manualReturnId');
+      const val = input.value.trim();
+      if (!val) return;
+      unmarkReturn(val);
       input.value = '';
     }
 
@@ -406,166 +424,20 @@
       }
 
       updateUI(refreshDuplicateStatus());
-      document.getElementById('statusBox').innerHTML = `🔄 <b>${searchKey}</b> রিটার্ন হিসেবে চিহ্নিত হয়েছে! সেভ রাখতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
+      document.getElementById('statusBox').innerHTML = `🔄 <b>${searchKey}</b> লাল রঙে রিটার্ন চিহ্নিত হয়েছে! সেভ রাখতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
     }
 
-    async function processReturnPDFs(input) {
-      const files = input.files;
-      if (!files || files.length === 0) return;
-
-      for (let file of files) {
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-          for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-            const page = await pdf.getPage(pageNum);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str.trim()).join(' ');
-
-            let pForm = "অন্যান্য";
-            let orderId = "";
-            if (amazonOrderRegex.test(pageText)) {
-              pForm = "Amazon";
-              orderId = pageText.match(amazonOrderRegex)[0];
-            } else if (flipkartOrderRegex.test(pageText)) {
-              pForm = "Flipkart";
-              orderId = pageText.match(flipkartOrderRegex)[0];
-            } else if (meeshoOrderRegex.test(pageText)) {
-              pForm = "Meesho";
-              orderId = pageText.match(meeshoOrderRegex)[0];
-            }
-
-            let trackingId = await extractAmazonAWBFromImage(page) || findTrackingNumber(pageText, orderId || "0", pForm);
-
-            if (orderId) markAsReturned(orderId);
-            else if (trackingId !== "নেই") markAsReturned(trackingId);
-          }
-        } catch (e) {}
-      }
-      input.value = '';
-    }
-
-    function removeOnlyDuplicates() {
-      const initialCount = extractedData.length;
-      extractedData = extractedData.filter(item => item.status !== "Duplicate");
-      const removedCount = initialCount - extractedData.length;
-      refreshDuplicateStatus();
-      updateUI(0);
-      document.getElementById('statusBox').innerHTML = `🧹 <b>${removedCount}</b> টি ডুপ্লিকেট মুছে ফেলা হয়েছে! সেভ করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
-    }
-
-    function deleteSingleRow(index) {
-      extractedData.splice(index, 1);
-      const dupCount = refreshDuplicateStatus();
-      updateUI(dupCount);
-      document.getElementById('statusBox').innerHTML = `🗑️ একটি সারি মুছে ফেলা হয়েছে। স্থায়ী করতে <b>"💾 মেমরিতে সেভ করুন"</b> চাপুন।`;
-    }
-
-    function updateUI(duplicateCount, newlyAddedCount = 0) {
-      const statusBox = document.getElementById('statusBox');
-      let returnCount = extractedData.filter(d => d.status === "Returned").length;
-      
-      let summaryText = `📦 মোট আছে: <b>${extractedData.length}</b> টি অর্ডার।`;
-      if (newlyAddedCount > 0) {
-        summaryText += ` (📥 নতুন যোগ হয়েছে: <b style="color:#34d399;">${newlyAddedCount}</b> টি)`;
-      }
-      if (duplicateCount > 0) {
-        summaryText += ` (🚫 ডুপ্লিকেট: <b style="color:#f87171;">${duplicateCount}</b> টি)`;
-      }
-      if (returnCount > 0) {
-        summaryText += ` (🔄 রিটার্ন: <b style="color:#f59e0b;">${returnCount}</b> টি)`;
-      }
-
-      statusBox.innerHTML = summaryText;
-      renderTable();
-    }
-
-    function renderTable() {
-      const tableBody = document.getElementById('tableBody');
-      tableBody.innerHTML = '';
-      let hasDuplicates = false;
-
-      extractedData.forEach((row, i) => {
-        if (row.status === 'Duplicate') hasDuplicates = true;
-        const tr = document.createElement('tr');
-        
-        let badgeClass = 'badge-unique';
-        let badgeText = 'ডেলিভারি/প্রসেসিং';
-
-        if (row.status === 'Duplicate') {
-          badgeClass = 'badge-duplicate';
-          badgeText = '🚫 ডুপ্লিকেট';
-        } else if (row.status === 'Returned') {
-          badgeClass = 'badge-returned';
-          badgeText = '🔄 রিটার্ন এসেছে';
-          tr.className = 'row-returned';
+    // ভুল করে রিটার্ন হলে তা স্বাভাবিক অবস্থায় ফেরানোর ফাংশন
+    function unmarkReturn(searchKey) {
+      let found = false;
+      extractedData.forEach(item => {
+        if (item.orderId.toLowerCase() === searchKey.toLowerCase() || 
+           (item.trackingId !== "নেই" && item.trackingId.toLowerCase() === searchKey.toLowerCase())) {
+          item.status = "Unique";
+          found = true;
         }
-
-        let trackUrl = getTrackingUrl(row.courier, row.trackingId);
-        let trackingDisplay = row.trackingId;
-
-        if (trackUrl && row.trackingId !== "নেই") {
-          trackingDisplay = `<a class="track-link" href="${trackUrl}" target="_blank" title="ক্লিক করে লাইভ স্ট্যাটাস দেখুন">${row.trackingId} 🔗</a>`;
-        } else if (row.trackingId === "নেই") {
-          trackingDisplay = `<span style="color:#f87171; font-weight:bold;">নেই</span>`;
-        }
-
-        tr.innerHTML = `
-          <td>${i + 1}</td>
-          <td><span class="${badgeClass}">${badgeText}</span></td>
-          <td style="color:#94a3b8;">${row.date}</td>
-          <td><b>${row.platform}</b></td>
-          <td><span style="color:#38bdf8; font-weight:bold;">${row.courier}</span></td>
-          <td>${row.orderId}</td>
-          <td>${trackingDisplay}</td>
-          <td style="text-align:center;">
-            <button class="btn-del-row" onclick="deleteSingleRow(${i})" title="মুছুন">❌</button>
-          </td>
-        `;
-        tableBody.appendChild(tr);
       });
 
-      const show = extractedData.length > 0;
-      document.getElementById('resultsBox').style.display = show ? 'block' : 'none';
-      document.getElementById('saveBtn').style.display = show ? 'block' : 'none';
-      document.getElementById('exportBtn').style.display = show ? 'block' : 'none';
-      document.getElementById('clearBtn').style.display = show ? 'block' : 'none';
-      document.getElementById('removeDupBtn').style.display = (show && hasDuplicates) ? 'block' : 'none';
-    }
-
-    function exportToCSV() {
-      if (!extractedData.length) return;
-      let csv = "Serial,Status,Date,Platform,Courier Partner,Order ID,Tracking ID\n";
-      extractedData.forEach((r, i) => {
-        csv += `${i + 1},"${r.status}","\t${r.date}","${r.platform}","${r.courier}","\t${r.orderId}","\t${r.trackingId}"\n`;
-      });
-      const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `Orders_Report_${new Date().toISOString().slice(0,10)}.csv`;
-      link.click();
-    }
-
-    function clearData() {
-      if (confirm("আপনি কি নিশ্চিত যে সংরক্ষিত সব তথ্য মুছে ফেলতে চান?")) {
-        extractedData = [];
-        localStorage.removeItem('my_orders_db');
-        document.getElementById('tableBody').innerHTML = '';
-        document.getElementById('resultsBox').style.display = 'none';
-        document.getElementById('saveBtn').style.display = 'none';
-        document.getElementById('exportBtn').style.display = 'none';
-        document.getElementById('removeDupBtn').style.display = 'none';
-        document.getElementById('clearBtn').style.display = 'none';
-        document.getElementById('statusBox').innerHTML = 'সব তথ্য মুছে ফেলা হয়েছে।';
-        document.getElementById('pdfInput').value = '';
-      }
-    }
-
-    window.onload = function() {
-      if (extractedData.length > 0) {
+      if (found) {
         updateUI(refreshDuplicateStatus());
-      }
-    };
-  </script>
-</body>
-</html>
+        document.getElementById('statusBox').innerHTML = `↩️ <b>${searchKey}</b> রিটার্ন বাতিল করে সাধারণ অর্ডারে ফেরানো হয়েছে! সেভ করতে <b>"💾 মেমরিতে সেভ 
