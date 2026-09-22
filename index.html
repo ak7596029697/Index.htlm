@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bulk Shipping & Return Order Manager</title>
-  <!-- PDF.js, Tesseract OCR & Barcode Scanner Library -->
+  <!-- আপনার পরীক্ষিত আসল লাইব্রেরি সমূহ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -85,7 +85,6 @@
     <p class="subtitle">Amazon, Flipkart ও Meesho শিপিং লেবেল ও মেমরি সেভ সিস্টেম</p>
 
     <div class="grid-sections">
-      <!-- ডিসপ্যাচ কার্ড -->
       <div class="card card-dispatch">
         <div class="card-title" style="color: #38bdf8;">📦 ডিসপ্যাচ অর্ডার (শিপিং লেবেল)</div>
         <label class="upload-box" for="pdfInput">
@@ -97,7 +96,6 @@
         <button class="btn-cam-scan btn-scan-dispatch" onclick="startScanner('dispatch')">📷 ক্যামেরা দিয়ে ডিসপ্যাচ বারকোড স্ক্যান</button>
       </div>
 
-      <!-- রিটার্ন কার্ড -->
       <div class="card card-return">
         <div class="card-title" style="color: #ef4444;">🔄 রিটার্ন পার্সেল এন্ট্রি ও আন-মার্ক</div>
         <label class="upload-box" for="returnPdfInput" style="border-color: #ef4444; background: rgba(239, 68, 68, 0.04);">
@@ -157,6 +155,7 @@
     </div>
   </div>
 
+  <!-- OCR ক্যানভাস -->
   <canvas id="hiddenCanvas" style="display:none;"></canvas>
   <canvas id="cropCanvas" style="display:none;"></canvas>
 
@@ -324,7 +323,7 @@
       if (!files || files.length === 0) return;
 
       const statusBox = document.getElementById('statusBox');
-      statusBox.innerHTML = `⏳ মোট ${files.length} টি ফাইল প্রসেস করা হচ্ছে...`;
+      statusBox.innerHTML = `⏳ মোট ${files.length} টি ফাইল এসেছে, প্রসেস করা হচ্ছে...`;
 
       let beforeCount = extractedData.length;
 
@@ -334,7 +333,7 @@
 
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, disableFontFace: true }).promise;
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           const totalPages = pdf.numPages;
 
           let pendingAmazonAWB = "";
@@ -346,11 +345,9 @@
             const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
             const pageText = items.join(' ');
 
-            if (pageText.length < 40) {
-              try {
-                let awb = await extractAmazonAWBFromImage(page);
-                if (awb) pendingAmazonAWB = awb;
-              } catch(e) {}
+            if (items.length === 0 || pageText.includes("AWB") || pageText.length < 50) {
+              let awb = await extractAmazonAWBFromImage(page);
+              if (awb) pendingAmazonAWB = awb;
             }
 
             let platform = "অন্যান্য";
@@ -415,7 +412,7 @@
       for (let file of files) {
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, disableFontFace: true }).promise;
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           for (let p = 1; p <= pdf.numPages; p++) {
             const page = await pdf.getPage(p);
             const textContent = await page.getTextContent();
@@ -634,8 +631,8 @@
       }
     }
 
-    // নেটিভ গুগল ড্রাইভ, হোয়াটসঅ্যাপ ও জিমেইল শেয়ার শিট লজিক
-    async function exportToCSV() {
+    // নেটিভ অ্যান্ড্রয়েড শেয়ার ডায়ালগ কল (Drive / WhatsApp / Gmail)
+    function exportToCSV() {
       if (extractedData.length === 0) {
         alert("শেয়ার বা সেভ করার মতো কোনো ডেটা নেই!");
         return;
@@ -647,24 +644,15 @@
       });
 
       const fileName = `Orders_Report_${new Date().toISOString().slice(0,10)}.csv`;
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const file = new File([blob], fileName, { type: 'text/csv' });
 
-      // অ্যান্ড্রয়েড নেটিভ শেয়ার শিট কল করা (Drive, WhatsApp, Gmail অপশন ওপেন হবে)
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            title: 'NXT Orders Excel Report',
-            text: 'আজকের ডিসপ্যাচ ও রিটার্ন অর্ডারের আপডেটেড তালিকা।',
-            files: [file]
-          });
-          return;
-        } catch (err) {
-          if (err.name === 'AbortError') return; // ইউজার নিজেই ব্যাক করলে কিছু হবে না
-        }
+      // অ্যান্ড্রয়েড অ্যাপের নিজস্ব শেয়ার ফাংশন কল
+      if (window.AndroidBridge && typeof window.AndroidBridge.shareCSV === 'function') {
+        window.AndroidBridge.shareCSV(csv, fileName);
+        return;
       }
 
-      // শেয়ার সাপোর্ট না করলে সাধারণ ডাউনলোড ব্যাকআপ
+      // সাধারণ ব্রাউজারে চললে ডাউনলোড ব্যাকআপ
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
