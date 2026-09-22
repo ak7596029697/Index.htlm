@@ -27,16 +27,22 @@
     .upload-box:hover { border-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }
     input[type="file"] { display: none; }
 
+    .btn-cam-scan { width: 100%; margin-top: 10px; padding: 9px; border-radius: 6px; border: none; color: #ffffff; font-weight: bold; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-scan-dispatch { background: #0284c7; }
+    .btn-scan-dispatch:hover { background: #0369a1; }
+    .btn-scan-return { background: #b91c1c; }
+    .btn-scan-return:hover { background: #991b1b; }
+
+    /* ক্যামেরা স্ক্যানার পপ-আপ/ভিউ */
+    #scanner-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+    #scanner-box { width: 100%; max-width: 400px; background: #1e293b; border-radius: 12px; padding: 16px; border: 1px solid #38bdf8; text-align: center; }
+    #scanner-preview { width: 100%; max-height: 260px; border-radius: 8px; overflow: hidden; }
+
     .return-input-group { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
     .return-input-group input { flex: 2; min-width: 180px; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; background: #1e293b; color: white; font-family: monospace; font-size: 13px; }
     .btn-return-mark { padding: 8px 12px; border-radius: 6px; border: none; background: #ef4444; color: #ffffff; font-weight: bold; cursor: pointer; }
     .btn-return-unmark { padding: 8px 12px; border-radius: 6px; border: none; background: #475569; color: #ffffff; font-weight: bold; cursor: pointer; }
     .btn-return-unmark:hover { background: #64748b; }
-    .btn-cam-scan { width: 100%; margin-top: 10px; padding: 8px; border-radius: 6px; border: none; background: #0284c7; color: #ffffff; font-weight: bold; cursor: pointer; font-size: 13px; }
-
-    /* ক্যামেরা স্ক্যানার বক্স */
-    #scanner-box { display: none; margin-top: 10px; background: #000; border-radius: 8px; padding: 8px; border: 1px solid #38bdf8; text-align: center; }
-    #scanner-preview { width: 100%; max-height: 240px; }
 
     .status-bar { margin-top: 15px; font-size: 14px; text-align: center; font-weight: bold; color: #38bdf8; min-height: 26px; padding: 6px 10px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); }
     .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
@@ -80,6 +86,7 @@
     <p class="subtitle">Amazon, Flipkart ও Meesho শিপিং লেবেল ও মেমরি সেভ সিস্টেম</p>
 
     <div class="grid-sections">
+      <!-- ডিসপ্যাচ কার্ড -->
       <div class="card card-dispatch">
         <div class="card-title" style="color: #38bdf8;">📦 ডিসপ্যাচ অর্ডার (শিপিং লেবেল)</div>
         <label class="upload-box" for="pdfInput">
@@ -88,8 +95,11 @@
           <div style="font-size: 11px; color: #94a3b8;">(Amazon, Flipkart, Meesho এক বা একাধিক ফাইল)</div>
           <input type="file" id="pdfInput" accept="application/pdf" multiple onchange="processMultiplePDFs(this)">
         </label>
+        <!-- ডিসপ্যাচ স্ক্যান বাটন -->
+        <button class="btn-cam-scan btn-scan-dispatch" onclick="startScanner('dispatch')">📷 ক্যামেরা দিয়ে ডিসপ্যাচ বারকোড স্ক্যান</button>
       </div>
 
+      <!-- রিটার্ন কার্ড -->
       <div class="card card-return">
         <div class="card-title" style="color: #ef4444;">🔄 রিটার্ন পার্সেল এন্ট্রি ও আন-মার্ক</div>
         <label class="upload-box" for="returnPdfInput" style="border-color: #ef4444; background: rgba(239, 68, 68, 0.04);">
@@ -98,18 +108,14 @@
           <div style="font-size: 11px; color: #ef4444;">(রিটার্ন স্লিপ ফাইল থাকলে)</div>
           <input type="file" id="returnPdfInput" accept="application/pdf" multiple onchange="processReturnPDFs(this)">
         </label>
-
-        <!-- বারকোড স্ক্যানার বাটন -->
-        <button class="btn-cam-scan" onclick="toggleCameraScanner()">📷 ক্যামেরা দিয়ে বারকোড স্ক্যান করুন</button>
-        <div id="scanner-box">
-          <div id="scanner-preview"></div>
-          <button style="margin-top:6px; background:#475569; color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;" onclick="stopCameraScanner()">স্ক্যানার বন্ধ করুন</button>
-        </div>
+        
+        <!-- রিটার্ন স্ক্যান বাটন -->
+        <button class="btn-cam-scan btn-scan-return" onclick="startScanner('return')">📷 ক্যামেরা দিয়ে রিটার্ন বারকোড স্ক্যান</button>
 
         <div class="return-input-group">
           <input type="text" id="manualReturnId" placeholder="Order ID বা Tracking ID লিখুন...">
           <button class="btn-return-mark" onclick="handleManualReturn()">রিটার্ন মার্ক</button>
-          <button class="btn-return-unmark" onclick="handleManualUnreturn()" title="ভুল করে রিটার্ন হলে স্বাভাবিক অবস্থায় ফেরান">↩️ রিটার্ন বাতিল</button>
+          <button class="btn-return-unmark" onclick="handleManualUnreturn()" title="ভুল করে রিটার্ন হলে স্বাভাবিক অবস্থায় ফেরান">↩️ বাতিল</button>
         </div>
       </div>
     </div>
@@ -124,7 +130,7 @@
     </div>
 
     <div class="search-container" id="searchContainer">
-      <input type="text" id="searchInput" class="search-box" placeholder="🔍 যে কোনো Order ID বা Tracking ID লিখে বা পেস্ট করে খুঁজুন..." oninput="handleSearch()">
+      <input type="text" id="searchInput" class="search-box" placeholder="🔍 যে কোনো Order ID বা Tracking ID লিখে খুঁজুন..." oninput="handleSearch()">
     </div>
 
     <div class="results" id="resultsBox" style="display:none;">
@@ -146,6 +152,15 @@
     </div>
   </div>
 
+  <!-- ক্যামেরা স্ক্যানার উইন্ডো -->
+  <div id="scanner-modal">
+    <div id="scanner-box">
+      <h3 id="scanner-title" style="color:#38bdf8; font-size:14px; margin-bottom:8px;">📷 বারকোড স্ক্যানার</h3>
+      <div id="scanner-preview"></div>
+      <button style="margin-top:10px; background:#475569; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:bold; cursor:pointer;" onclick="stopCameraScanner()">✕ বন্ধ করুন</button>
+    </div>
+  </div>
+
   <canvas id="hiddenCanvas" style="display:none;"></canvas>
   <canvas id="cropCanvas" style="display:none;"></canvas>
 
@@ -155,6 +170,7 @@
     let extractedData = JSON.parse(localStorage.getItem('my_orders_db') || '[]');
     let ocrWorker = null;
     let html5QrScanner = null;
+    let currentScanMode = 'return'; // 'dispatch' অথবা 'return'
 
     async function initOCR() {
       if (!ocrWorker) {
@@ -292,7 +308,6 @@
       return dupCount;
     }
 
-    // সম্পূর্ণ নীরব অটো-সেভ (ডাউনলোড জ্যাম ছাড়া কেবল লোকাল মেমরিতে সেভ)
     function autoSaveAndSync() {
       localStorage.setItem('my_orders_db', JSON.stringify(extractedData));
     }
@@ -383,7 +398,7 @@
 
       let addedCount = extractedData.length - beforeCount;
       const duplicateCount = refreshDuplicateStatus();
-      autoSaveAndSync(); // স্বয়ংক্রিয় সেভ
+      autoSaveAndSync();
       updateUI(duplicateCount, addedCount);
       input.value = '';
     }
@@ -440,6 +455,7 @@
       input.value = '';
     }
 
+    // নিখুঁত রিটার্ন মার্কিং (ট্র্যাকিং বা অর্ডার দিয়ে খোঁজা)
     function markAsReturned(searchKey) {
       let found = false;
       extractedData.forEach(item => {
@@ -450,9 +466,11 @@
         }
       });
 
+      // মেমরিতে না থাকলে নতুন রিটার্ন হিসেবে যোগ
       if (!found) {
+        let isOrder = amazonOrderRegex.test(searchKey) || flipkartOrderRegex.test(searchKey) || meeshoOrderRegex.test(searchKey);
         let pForm = "অন্যান্য";
-        let cName = "অন্যান্য";
+        let cName = detectCourier("", searchKey, "অন্যান্য");
 
         if (amazonOrderRegex.test(searchKey)) {
           pForm = "Amazon";
@@ -462,15 +480,14 @@
           cName = "Ekart";
         } else if (meeshoOrderRegex.test(searchKey)) {
           pForm = "Meesho";
-          cName = "Shadowfax / Delhivery / Xpressbees";
         }
 
         extractedData.unshift({
           date: new Date().toISOString().slice(0,10),
           platform: pForm,
           courier: cName,
-          orderId: searchKey,
-          trackingId: "নেই",
+          orderId: isOrder ? searchKey : "স্ক্যান রিটার্ন",
+          trackingId: isOrder ? "নেই" : searchKey, // ট্র্যাকিং আইডি হিসেবে সঠিক ঘরে সেভ
           status: "Returned"
         });
       }
@@ -478,6 +495,30 @@
       autoSaveAndSync();
       updateUI(refreshDuplicateStatus());
       document.getElementById('statusBox').innerHTML = `🔄 <b>${searchKey}</b> লাল রঙে রিটার্ন চিহ্নিত ও অটো-সেভ হয়েছে!`;
+    }
+
+    // ডিসপ্যাচ স্ক্যান হ্যান্ডলার (বারকোড দিয়ে নতুন ডিসপ্যাচ এন্ট্রি)
+    function handleDispatchScan(scannedCode) {
+      // ট্র্যাকিং কোড দিয়ে ডুপ্লিকেট চেক
+      let existing = extractedData.find(item => item.trackingId.toLowerCase() === scannedCode.toLowerCase());
+      if (existing) {
+        alert(`⚠️ এই ট্র্যাকিং নম্বরটি (${scannedCode}) ইতিমধ্যে মেমরিতে আছে!`);
+        return;
+      }
+
+      let courier = detectCourier("", scannedCode, "অন্যান্য");
+      extractedData.unshift({
+        date: new Date().toISOString().slice(0,10),
+        platform: "বারকোড ডিসপ্যাচ",
+        courier: courier,
+        orderId: "স্ক্যান ডিসপ্যাচ",
+        trackingId: scannedCode, // ট্র্যাকিং আইডির ঘরে সঠিক এন্ট্রি
+        status: "Unique"
+      });
+
+      autoSaveAndSync();
+      updateUI(refreshDuplicateStatus(), 1);
+      document.getElementById('statusBox').innerHTML = `📦 <b>${scannedCode}</b> নতুন ট্র্যাকিং আইডি হিসেবে ডিসপ্যাচে সেভ হয়েছে!`;
     }
 
     function unmarkReturn(searchKey) {
@@ -497,14 +538,21 @@
       }
     }
 
-    // লাইভ ক্যামেরা বারকোড স্ক্যানার
-    function toggleCameraScanner() {
-      const box = document.getElementById("scanner-box");
-      if (box.style.display === "block") {
-        stopCameraScanner();
-        return;
+    // ক্যামেরা স্ক্যানার চালু
+    function startScanner(mode) {
+      currentScanMode = mode;
+      const modal = document.getElementById("scanner-modal");
+      const title = document.getElementById("scanner-title");
+      
+      if (mode === 'dispatch') {
+        title.innerHTML = "📦 ডিসপ্যাচ বারকোড স্ক্যান করুন";
+        title.style.color = "#38bdf8";
+      } else {
+        title.innerHTML = "🔄 রিটার্ন বারকোড স্ক্যান করুন";
+        title.style.color = "#ef4444";
       }
-      box.style.display = "block";
+
+      modal.style.display = "flex";
       html5QrScanner = new Html5Qrcode("scanner-preview");
 
       html5QrScanner.start(
@@ -513,7 +561,13 @@
         (decodedText) => {
           if (navigator.vibrate) navigator.vibrate(100);
           stopCameraScanner();
-          markAsReturned(decodedText.trim());
+          const cleanCode = decodedText.trim();
+          
+          if (currentScanMode === 'dispatch') {
+            handleDispatchScan(cleanCode);
+          } else {
+            markAsReturned(cleanCode);
+          }
         },
         () => {}
       ).catch(() => {
@@ -526,12 +580,12 @@
       if (html5QrScanner) {
         html5QrScanner.stop().then(() => {
           html5QrScanner.clear();
-          document.getElementById("scanner-box").style.display = "none";
+          document.getElementById("scanner-modal").style.display = "none";
         }).catch(() => {
-          document.getElementById("scanner-box").style.display = "none";
+          document.getElementById("scanner-modal").style.display = "none";
         });
       } else {
-        document.getElementById("scanner-box").style.display = "none";
+        document.getElementById("scanner-modal").style.display = "none";
       }
     }
 
@@ -573,7 +627,6 @@
       alert(`মোট ${removedCount} টি ডুপ্লিকেট অর্ডার মুছে ফেলা হয়েছে!`);
     }
 
-    // সুরক্ষিত মুছে ফেলুন (Safe Delete Confirmation)
     function clearData() {
       const sure = confirm("⚠️ সতর্কতা!\nআপনি কি নিশ্চিতভাবে সমস্ত সংরক্ষিত ডেটা সম্পূর্ণ মুছে ফেলতে চান?\nএকবার মুছে ফেললে এটি আর ফিরিয়ে আনা সম্ভব হবে না।");
       if (sure) {
@@ -584,7 +637,6 @@
       }
     }
 
-    // ব্যবহারকারী যখন বোতাম চাপবেন তখন একক ফ্রেশ এক্সেল ডাউনলোড
     function exportToCSV() {
       if (extractedData.length === 0) {
         alert("ডাউনলোড করার মতো কোনো ডেটা নেই!");
@@ -677,7 +729,6 @@
       renderTable();
     }
 
-    // পূর্বের ডেটা লোড
     updateUI(refreshDuplicateStatus());
   </script>
 </body>
