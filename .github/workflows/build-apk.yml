@@ -19,22 +19,21 @@ jobs:
 
       - name: Build Pure Android APK
         run: |
-          # ডিরেক্টরি তৈরি
           mkdir -p build/assets build/res/values build/src/com/smartorder/app build/gen build/obj build/bin
 
-          # ওয়েব ফাইল কপি
           cp index.html build/assets/
           if [ -f manifest.json ]; then cp manifest.json build/assets/; fi
 
-          # AndroidManifest.xml
           cat << 'EOF' > build/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.smartorder.app"
-              android:versionCode="1"
-              android:versionName="1.0">
+              android:versionCode="2"
+              android:versionName="1.1">
               <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
               <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+              <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
               <application
                   android:label="Smart Order"
                   android:allowBackup="true"
@@ -52,7 +51,6 @@ jobs:
           </manifest>
           EOF
 
-          # strings.xml
           cat << 'EOF' > build/res/values/strings.xml
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -60,12 +58,15 @@ jobs:
           </resources>
           EOF
 
-          # Java Activity (Pure Android WebView, No external libraries needed)
+          # File Chooser সহ MainActivity.java
           cat << 'EOF' > build/src/com/smartorder/app/MainActivity.java
           package com.smartorder.app;
 
           import android.app.Activity;
+          import android.content.Intent;
+          import android.net.Uri;
           import android.os.Bundle;
+          import android.webkit.ValueCallback;
           import android.webkit.WebChromeClient;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
@@ -73,6 +74,8 @@ jobs:
 
           public class MainActivity extends Activity {
               private WebView webView;
+              private ValueCallback<Uri[]> uploadMessage;
+              private final static int FILECHOOSER_RESULTCODE = 1;
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
@@ -88,8 +91,38 @@ jobs:
                   s.setDatabaseEnabled(true);
 
                   webView.setWebViewClient(new WebViewClient());
-                  webView.setWebChromeClient(new WebChromeClient());
+                  webView.setWebChromeClient(new WebChromeClient() {
+                      @Override
+                      public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+                          if (uploadMessage != null) {
+                              uploadMessage.onReceiveValue(null);
+                              uploadMessage = null;
+                          }
+                          uploadMessage = filePathCallback;
+
+                          Intent intent = fileChooserParams.createIntent();
+                          try {
+                              startActivityForResult(intent, FILECHOOSER_RESULTCODE);
+                          } catch (Exception e) {
+                              uploadMessage = null;
+                              return false;
+                          }
+                          return true;
+                      }
+                  });
+
                   webView.loadUrl("file:///android_asset/index.html");
+              }
+
+              @Override
+              protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+                  if (requestCode == FILECHOOSER_RESULTCODE) {
+                      if (uploadMessage == null) return;
+                      uploadMessage.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+                      uploadMessage = null;
+                  } else {
+                      super.onActivityResult(requestCode, resultCode, data);
+                  }
               }
 
               @Override
@@ -103,27 +136,21 @@ jobs:
           }
           EOF
 
-          # SDK টুলস পাথ
           SDK_ROOT=$ANDROID_HOME
           BUILD_TOOLS=$SDK_ROOT/build-tools/34.0.0
           PLATFORM=$SDK_ROOT/platforms/android-34/android.jar
 
-          # ১. রিসোর্স কম্পাইল ও লিঙ্কিং
           $BUILD_TOOLS/aapt2 compile --dir build/res -o build/compiled_res.zip
           $BUILD_TOOLS/aapt2 link -I $PLATFORM -A build/assets --manifest build/AndroidManifest.xml -o build/bin/base.apk --java build/gen build/compiled_res.zip --auto-add-overlay
 
-          # ২. জাভা কোড কম্পাইল
           javac -cp $PLATFORM -d build/obj build/gen/com/smartorder/app/R.java build/src/com/smartorder/app/MainActivity.java
 
-          # ৩. DEX জেনারেশন (d8)
           $BUILD_TOOLS/d8 $(find build/obj -name "*.class") --output build/bin/
 
-          # ৪. APK-র ভেতর DEX যোগ করা
           cd build/bin
           $BUILD_TOOLS/aapt add base.apk classes.dex
           cd ../..
 
-          # ৫. টেস্ট কী তৈরি ও সাইনিং
           keytool -genkey -v -keystore build/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=AndroidDebug,O=Android,C=US"
           $BUILD_TOOLS/zipalign -v -p 4 build/bin/base.apk build/Smart-Order.apk
           $BUILD_TOOLS/apksigner sign --ks build/debug.keystore --ks-pass pass:android --key-pass pass:android build/Smart-Order.apk
