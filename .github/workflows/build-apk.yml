@@ -17,49 +17,43 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Create Native Android Project
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build Standalone WebView APK
         run: |
-          mkdir -p app-build/app/src/main/java/com/smartorder/app
-          mkdir -p app-build/app/src/main/assets
-          mkdir -p app-build/app/src/main/res/values
-          mkdir -p app-build/gradle/wrapper
+          mkdir -p project/app/src/main/java/com/smartorder/app
+          mkdir -p project/app/src/main/assets
+          mkdir -p project/app/src/main/res/values
 
-          # HTML ও Manifest কপি করা
-          cp index.html app-build/app/src/main/assets/
-          if [ -f manifest.json ]; then cp manifest.json app-build/app/src/main/assets/; fi
+          cp index.html project/app/src/main/assets/
+          if [ -f manifest.json ]; then cp manifest.json project/app/src/main/assets/; fi
 
-          # settings.gradle তৈরি
-          cat << 'EOF' > app-build/settings.gradle
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
+          cat << 'EOF' > project/settings.gradle
           rootProject.name = "SmartOrder"
           include ':app'
           EOF
 
-          # root build.gradle তৈরি
-          cat << 'EOF' > app-build/build.gradle
-          plugins {
-              id 'com.android.application' version '8.2.2' apply false
+          cat << 'EOF' > project/build.gradle
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.1.4'
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
           }
           EOF
 
-          # app/build.gradle তৈরি
-          cat << 'EOF' > app-build/app/build.gradle
-          plugins {
-              id 'com.android.application'
-          }
+          cat << 'EOF' > project/app/build.gradle
+          apply plugin: 'com.android.application'
 
           android {
               namespace 'com.smartorder.app'
@@ -82,20 +76,19 @@ jobs:
 
           dependencies {
               implementation 'androidx.appcompat:appcompat:1.6.1'
-              implementation 'androidx.webkit:webkit:1.10.0'
           }
           EOF
 
-          # AndroidManifest.xml তৈরি
-          cat << 'EOF' > app-build/app/src/main/AndroidManifest.xml
+          cat << 'EOF' > project/app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
               <application
                   android:allowBackup="true"
                   android:label="Smart Order"
                   android:supportsRtl="true"
-                  android:theme="@style/Theme.AppCompat.NoActionBar">
+                  android:theme="@style/Theme.AppCompat.Light.NoActionBar">
                   <activity
                       android:name=".MainActivity"
                       android:exported="true"
@@ -109,19 +102,18 @@ jobs:
           </manifest>
           EOF
 
-          # strings.xml তৈরি
-          cat << 'EOF' > app-build/app/src/main/res/values/strings.xml
+          cat << 'EOF' > project/app/src/main/res/values/strings.xml
           <resources>
               <string name="app_name">Smart Order</string>
           </resources>
           EOF
 
-          # MainActivity.java তৈরি (WebView ইঞ্জিন)
-          cat << 'EOF' > app-build/app/src/main/java/com/smartorder/app/MainActivity.java
+          cat << 'EOF' > project/app/src/main/java/com/smartorder/app/MainActivity.java
           package com.smartorder.app;
 
           import android.annotation.SuppressLint;
           import android.os.Bundle;
+          import android.webkit.WebChromeClient;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
@@ -137,13 +129,15 @@ jobs:
                   webView = new WebView(this);
                   setContentView(webView);
 
-                  WebSettings webSettings = webView.getSettings();
-                  webSettings.setJavaScriptEnabled(true);
-                  webSettings.setDomStorageEnabled(true);
-                  webSettings.setAllowFileAccess(true);
-                  webSettings.setAllowContentAccess(true);
+                  WebSettings s = webView.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);
+                  s.setAllowFileAccess(true);
+                  s.setAllowContentAccess(true);
+                  s.setDatabaseEnabled(true);
 
                   webView.setWebViewClient(new WebViewClient());
+                  webView.setWebChromeClient(new WebChromeClient());
                   webView.loadUrl("file:///android_asset/index.html");
               }
 
@@ -158,17 +152,13 @@ jobs:
           }
           EOF
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Build Android APK
-        run: |
-          cd app-build
-          gradle wrapper --gradle-version 8.5
+          cd project
+          gradle wrapper --gradle-version 8.1.1
+          chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Smart-Order-App
-          path: app-build/app/build/outputs/apk/debug/*.apk
+          path: project/app/build/outputs/apk/debug/*.apk
