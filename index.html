@@ -10,7 +10,7 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 15px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-    .container { width: 100%; max-width: 1050px; background: #1e293b; border-radius: 12px; padding: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    .container { width: 100%; max-width: 1100px; background: #1e293b; border-radius: 12px; padding: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
     h1 { font-size: 19px; color: #38bdf8; text-align: center; margin-bottom: 4px; }
     p.subtitle { font-size: 12px; color: #94a3b8; text-align: center; margin-bottom: 15px; }
 
@@ -58,7 +58,7 @@
     .btn-remove-dup { background: #64748b; color: white; display: none; flex: 1.5; }
     .btn-clear { background: #ef4444; color: white; display: none; width: 40px; }
 
-    /* ফিল্টার এরিয়া ও ডেট রেঞ্জ */
+    /* ফিল্টার ও ডেট রেঞ্জ এরিয়া */
     .filter-wrapper { background: #0f172a; padding: 10px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 12px; display: none; }
     .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
     .filter-input { padding: 7px 10px; border-radius: 6px; border: 1px solid #475569; background: #1e293b; color: white; font-size: 12px; outline: none; }
@@ -173,17 +173,17 @@
       <button class="action-btn btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️</button>
     </div>
 
-    <!-- ফিল্টার ও ডেট রেঞ্জ এরিয়া -->
+    <!-- ফিল্টার ও ডেট রেঞ্জ এরিয়া (রিয়েল-টাইম আপলোড ডেট ফিল্টার) -->
     <div class="filter-wrapper" id="filterWrapper">
       <div class="filter-row">
         <input type="text" id="searchInput" class="filter-input" style="flex:2; min-width:180px;" placeholder="🔍 যে কোনো ID লিখে খুঁজুন..." oninput="applyFilters()">
         
         <div style="display:flex; align-items:center; gap:4px;">
-          <span class="date-label">From:</span>
+          <span class="date-label">আপলোড From:</span>
           <input type="date" id="dateFrom" class="filter-input" onchange="applyFilters()">
         </div>
         <div style="display:flex; align-items:center; gap:4px;">
-          <span class="date-label">To:</span>
+          <span class="date-label">আপলোড To:</span>
           <input type="date" id="dateTo" class="filter-input" onchange="applyFilters()">
         </div>
         <button class="filter-input" style="cursor:pointer;" onclick="resetAllFilters()">রিসেট</button>
@@ -197,7 +197,8 @@
           <tr>
             <th>#</th>
             <th>স্ট্যাটাস (ক্লিক করে বদলান)</th>
-            <th>তারিখ</th>
+            <th>আপলোড সময় (রিয়েল-টাইম)</th>
+            <th>লেবেল তারিখ</th>
             <th>প্ল্যাটফর্ম</th>
             <th>কুরিয়ার</th>
             <th>অর্ডার আইডি</th>
@@ -263,6 +264,20 @@
     let currentStatusFilter = 'ALL';
     let currentCourierFilter = 'ALL';
 
+    // রিয়েল-টাইম টাইমস্ট্যাম্প জেনারেটর
+    function getLiveTimestamp() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      return {
+        uploadDate: dateStr,
+        uploadTime: `${dateStr} ${timeStr}`
+      };
+    }
+
     // অডিও বিপ তৈরি
     function playBeepSound() {
       try {
@@ -299,7 +314,7 @@
           return `${year}-${month}-${day}`;
         }
       }
-      return new Date().toISOString().slice(0,10);
+      return "-";
     }
 
     function getTrackingUrl(courier, trackingId) {
@@ -428,10 +443,13 @@
               let trackingId = findTrackingNumber(pageText, orderId, platform);
               if ((trackingId === "নেই" || platform === "Amazon") && pendingAmazonAWB) trackingId = pendingAmazonAWB;
               let courier = detectCourier(pageText, trackingId, platform);
-              let orderDate = extractDate(pageText);
+              let labelDate = extractDate(pageText);
+              let live = getLiveTimestamp();
 
               extractedData.push({
-                date: orderDate,
+                uploadDate: live.uploadDate,
+                uploadTime: live.uploadTime,
+                labelDate: labelDate,
                 platform: platform,
                 courier: courier,
                 orderId: orderId,
@@ -511,8 +529,12 @@
         else if (flipkartOrderRegex.test(key)) { pForm = "Flipkart"; cName = "Ekart"; }
         else if (meeshoOrderRegex.test(key)) { pForm = "Meesho"; }
 
+        let live = getLiveTimestamp();
+
         extractedData.unshift({
-          date: new Date().toISOString().slice(0,10),
+          uploadDate: live.uploadDate,
+          uploadTime: live.uploadTime,
+          labelDate: "-",
           platform: pForm,
           courier: cName,
           orderId: isOrder ? key : "ম্যানুয়াল এন্ট্রি",
@@ -555,11 +577,15 @@
           playBeepSound();
           if (navigator.vibrate) navigator.vibrate(80);
 
+          let live = getLiveTimestamp();
+
           if (currentScanMode === 'dispatch') {
             let exists = extractedData.find(i => i.trackingId.toLowerCase() === cleanCode.toLowerCase());
             if (!exists) {
               extractedData.unshift({
-                date: new Date().toISOString().slice(0,10),
+                uploadDate: live.uploadDate,
+                uploadTime: live.uploadTime,
+                labelDate: "-",
                 platform: "বারকোড ডিসপ্যাচ",
                 courier: detectCourier("", cleanCode, "অন্যান্য"),
                 orderId: "স্ক্যান ডিসপ্যাচ",
@@ -582,7 +608,9 @@
             });
             if (!found) {
               extractedData.unshift({
-                date: new Date().toISOString().slice(0,10),
+                uploadDate: live.uploadDate,
+                uploadTime: live.uploadTime,
+                labelDate: "-",
                 platform: "অন্যান্য",
                 courier: detectCourier("", cleanCode, "অন্যান্য"),
                 orderId: "স্ক্যান রিটার্ন",
@@ -736,12 +764,16 @@
       let visible = 0;
 
       extractedData.forEach((item, index) => {
+        // ফিল্টার ম্যাচিং
         if (query && !item.orderId.toLowerCase().includes(query) && !item.trackingId.toLowerCase().includes(query)) return;
         if (currentStatusFilter !== 'ALL' && item.status !== currentStatusFilter) return;
         if (currentPlatformFilter !== 'ALL' && item.platform !== currentPlatformFilter) return;
         if (currentCourierFilter !== 'ALL' && item.courier !== currentCourierFilter) return;
-        if (fromD && item.date < fromD) return;
-        if (toD && item.date > toD) return;
+
+        // আপলোড ডেট অনুযায়ী ফিল্টার
+        let itemUploadDate = item.uploadDate || item.date;
+        if (fromD && itemUploadDate < fromD) return;
+        if (toD && itemUploadDate > toD) return;
 
         visible++;
         const tr = document.createElement('tr');
@@ -763,10 +795,14 @@
         const trackUrl = getTrackingUrl(item.courier, item.trackingId);
         if (trackUrl) trackingHtml = `<a class="track-link" href="${trackUrl}" target="_blank">${item.trackingId} 🔗</a>`;
 
+        let uploadDisplay = item.uploadTime || item.date || '-';
+        let labelDisplay = item.labelDate || item.date || '-';
+
         tr.innerHTML = `
           <td>${index + 1}</td>
           <td>${badgeHtml}</td>
-          <td>${item.date}</td>
+          <td style="color:#38bdf8; font-weight:bold;">${uploadDisplay}</td>
+          <td style="color:#94a3b8;">${labelDisplay}</td>
           <td><b>${item.platform}</b></td>
           <td>${item.courier}</td>
           <td style="font-weight:bold;">${item.orderId}</td>
@@ -777,7 +813,7 @@
       });
 
       if (visible === 0 && extractedData.length > 0) {
-        tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#94a3b8; padding:20px;">এই ফিল্টারে কোনো রেকর্ড পাওয়া যায়নি!</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:#94a3b8; padding:20px;">এই ফিল্টারে কোনো রেকর্ড পাওয়া যায়নি!</td></tr>`;
       }
     }
 
@@ -792,7 +828,6 @@
       document.getElementById('removeDupBtn').style.display = hasData ? 'inline-block' : 'none';
       document.getElementById('clearBtn').style.display = hasData ? 'inline-block' : 'none';
 
-      // কার্ড হিসাব
       let total = extractedData.length;
       let amz = extractedData.filter(i => i.platform === "Amazon");
       let fk = extractedData.filter(i => i.platform === "Flipkart");
@@ -859,9 +894,11 @@
 
       if (list.length === 0) return alert("এই ক্যাটাগরিতে কোনো অর্ডার নেই!");
 
-      let csv = "\uFEFFতারিখ,প্ল্যাটফর্ম,কুরিয়ার পার্টনার,অর্ডার আইডি,ট্র্যাকিং আইডি,স্ট্যাটাস\n";
+      let csv = "\uFEFFআপলোড সময়,লেবেল তারিখ,প্ল্যাটফর্ম,কুরিয়ার পার্টনার,অর্ডার আইডি,ট্র্যাকিং আইডি,স্ট্যাটাস\n";
       list.forEach(row => {
-        csv += `"${row.date}","${row.platform}","${row.courier}","${row.orderId}","${row.trackingId}","${row.status}"\n`;
+        let upTime = row.uploadTime || row.date || '';
+        let lblDate = row.labelDate || row.date || '';
+        csv += `"${upTime}","${lblDate}","${row.platform}","${row.courier}","${row.orderId}","${row.trackingId}","${row.status}"\n`;
       });
 
       const fileName = `${titlePrefix}_${new Date().toISOString().slice(0,10)}.csv`;
