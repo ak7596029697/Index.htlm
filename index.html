@@ -14,7 +14,7 @@
     h1 { font-size: 19px; color: #38bdf8; text-align: center; margin-bottom: 4px; }
     p.subtitle { font-size: 12px; color: #94a3b8; text-align: center; margin-bottom: 15px; }
 
-    /* ইন্টারেক্টিভ প্ল্যাটফর্ম ড্যাশবোর্ড কার্ড */
+    /* প্ল্যাটফর্ম ড্যাশবোর্ড কার্ড */
     .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
     .metric-card { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: all 0.2s; }
     .metric-card:hover, .metric-card.active { border-color: #38bdf8; transform: translateY(-2px); }
@@ -55,10 +55,10 @@
     button.action-btn { padding: 9px 12px; font-size: 12px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
     .btn-save { background: #3b82f6; color: white; display: none; flex: 1.5; }
     .btn-export { background: #10b981; color: white; display: none; flex: 2; }
-    .btn-remove-dup { background: #64748b; color: white; display: none; flex: 1.5; }
+    .btn-remove-dup { background: #e11d48; color: white; display: none; flex: 1.5; }
     .btn-clear { background: #ef4444; color: white; display: none; width: 40px; }
 
-    /* ফিল্টার ও ডেট রেঞ্জ এরিয়া */
+    /* ফিল্টার এরিয়া */
     .filter-wrapper { background: #0f172a; padding: 10px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 12px; display: none; }
     .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
     .filter-input { padding: 7px 10px; border-radius: 6px; border: 1px solid #475569; background: #1e293b; color: white; font-size: 12px; outline: none; }
@@ -71,20 +71,22 @@
     th { background: #1e293b; color: #94a3b8; position: sticky; top: 0; z-index: 10; }
     td { font-family: monospace; }
 
-    /* স্ট্যাটাস বাটন */
+    /* স্ট্যাটাস বাটন ও হাইলাইট */
     .status-badge { padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; border: none; font-size: 11px; }
     .badge-unique { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-    .badge-duplicate { background: rgba(148, 163, 184, 0.2); color: #94a3b8; cursor: default; }
+    .badge-duplicate { background: #e11d48; color: #ffffff; border: 1px solid #fda4af; animation: pulse 1.5s infinite; }
     .badge-cancelled { background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid #f59e0b; }
     .badge-returned { background: #ef4444; color: #fff; }
 
+    /* এক্সেলে যেমন ডুপ্লিকেট দুটোই লাল হাইলাইট হয় */
+    .row-duplicate { background: rgba(225, 29, 72, 0.22) !important; border-left: 4px solid #e11d48; }
     .row-returned { background: rgba(239, 68, 68, 0.15) !important; }
     .row-cancelled { background: rgba(245, 158, 11, 0.1) !important; }
 
     .btn-del-row { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 13px; }
     .track-link { color: #38bdf8; text-decoration: underline; font-weight: bold; }
 
-    /* পপ-আপ মডাল */
+    /* মডাল */
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; align-items: center; justify-content: center; padding: 20px; }
     .modal-box { width: 100%; max-width: 360px; background: #1e293b; border-radius: 10px; padding: 16px; border: 1px solid #38bdf8; }
     .modal-opt-btn { width: 100%; padding: 10px; margin-top: 8px; border-radius: 6px; border: none; font-weight: bold; font-size: 12px; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 8px; }
@@ -96,7 +98,7 @@
     <h1>📄 Dispatch & Return Order Manager</h1>
     <p class="subtitle">Amazon, Flipkart ও Meesho স্মার্ট ট্র্যাকিং ও সেভ সিস্টেম</p>
 
-    <!-- ইন্টারেক্টিভ প্ল্যাটফর্ম ড্যাশবোর্ড -->
+    <!-- ড্যাশবোর্ড কার্ড -->
     <div class="dashboard-grid" id="dashboardCards" style="display:none;">
       <div class="metric-card" onclick="setDashboardFilter('ALL', 'platform')">
         <div class="metric-title">📦 মোট লেবেল</div>
@@ -118,6 +120,11 @@
         <div class="metric-value" id="cardMsh">0</div>
         <div class="metric-sub" id="subMsh" style="color:#f87171;">রিটার্ন: 0</div>
       </div>
+      <div class="metric-card" onclick="setDashboardFilter('Duplicate', 'status')">
+        <div class="metric-title">⚠️ ডুপ্লিকেট পেয়ার</div>
+        <div class="metric-value" id="cardDup" style="color:#f43f5e;">0</div>
+        <div class="metric-sub" style="color:#fda4af;">একসাথে দেখতে চাপুন</div>
+      </div>
       <div class="metric-card" onclick="setDashboardFilter('Cancelled', 'status')">
         <div class="metric-title">🟡 ক্যানসেলড</div>
         <div class="metric-value" id="cardCan" style="color:#fbbf24;">0</div>
@@ -130,7 +137,7 @@
       </div>
     </div>
 
-    <!-- কুরিয়ার পার্টনার মিনি গ্রিড -->
+    <!-- কুরিয়ার মিনি গ্রিড -->
     <div class="courier-summary-box" id="courierBox" style="display:none;"></div>
 
     <div class="grid-sections">
@@ -169,11 +176,11 @@
     <div class="controls">
       <button class="action-btn btn-save" id="saveBtn" onclick="manualSaveToMemory()">💾 মেমরিতে সেভ</button>
       <button class="action-btn btn-export" id="exportBtn" onclick="openExportModal()">📤 Excel রিপোর্ট সেভ ও শেয়ার</button>
-      <button class="action-btn btn-remove-dup" id="removeDupBtn" onclick="removeOnlyDuplicates()">🧹 ডুপ্লিকেট মুছুন</button>
+      <button class="action-btn btn-remove-dup" id="removeDupBtn" onclick="confirmRemoveDuplicates()">🧹 ডুপ্লিকেট মুছুন</button>
       <button class="action-btn btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️</button>
     </div>
 
-    <!-- ফিল্টার ও ডেট রেঞ্জ এরিয়া (রিয়েল-টাইম আপলোড ডেট ফিল্টার) -->
+    <!-- ফিল্টার ও ডেট রেঞ্জ এরিয়া -->
     <div class="filter-wrapper" id="filterWrapper">
       <div class="filter-row">
         <input type="text" id="searchInput" class="filter-input" style="flex:2; min-width:180px;" placeholder="🔍 যে কোনো ID লিখে খুঁজুন..." oninput="applyFilters()">
@@ -196,7 +203,7 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>স্ট্যাটাস (ক্লিক করে বদলান)</th>
+            <th>স্ট্যাটাস</th>
             <th>আপলোড সময় (রিয়েল-টাইম)</th>
             <th>লেবেল তারিখ</th>
             <th>প্ল্যাটফর্ম</th>
@@ -222,7 +229,7 @@
     </div>
   </div>
 
-  <!-- কুইক টগল স্ট্যাটাস মডাল -->
+  <!-- কুইক টগল মডাল -->
   <div class="modal-overlay" id="statusModal">
     <div class="modal-box">
       <h3 style="color:#38bdf8; font-size:14px; margin-bottom:8px;">পার্সেল স্ট্যাটাস নির্ধারণ করুন</h3>
@@ -259,12 +266,10 @@
     let currentScanMode = 'return';
     let targetRowIndex = -1;
 
-    // ফিল্টার স্টেট
     let currentPlatformFilter = 'ALL';
     let currentStatusFilter = 'ALL';
     let currentCourierFilter = 'ALL';
 
-    // রিয়েল-টাইম টাইমস্ট্যাম্প জেনারেটর
     function getLiveTimestamp() {
       const now = new Date();
       const year = now.getFullYear();
@@ -278,7 +283,6 @@
       };
     }
 
-    // অডিও বিপ তৈরি
     function playBeepSound() {
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -550,7 +554,6 @@
       input.value = '';
     }
 
-    // কন্টিনিউয়াস স্ক্যানার
     let lastScannedText = "";
     let lastScanTime = 0;
 
@@ -645,7 +648,6 @@
       }
     }
 
-    // কুইক টগল
     function openStatusModal(index) {
       targetRowIndex = index;
       const item = extractedData[index];
@@ -679,40 +681,70 @@
       updateUI();
     }
 
+    // ডুপ্লিকেট দুটোকেই লাল হাইলাইট ও ট্র্যাকিং করার নির্ভুল লজিক
     function refreshDuplicates() {
-      const seen = new Set();
-      let dupCount = 0;
+      const orderCounts = {};
       extractedData.forEach(item => {
         if (item.status === "Returned" || item.status === "Cancelled") return;
-        if (seen.has(item.orderId)) {
-          item.status = "Duplicate";
-          dupCount++;
-        } else {
-          item.status = "Unique";
-          seen.add(item.orderId);
-        }
+        const key = item.orderId.trim();
+        orderCounts[key] = (orderCounts[key] || 0) + 1;
       });
-      return dupCount;
-    }
 
-    function removeOnlyDuplicates() {
-      const seen = new Set();
-      const uniqueList = [];
-      let rem = 0;
+      let dupItemsCount = 0;
       extractedData.forEach(item => {
         if (item.status === "Returned" || item.status === "Cancelled") {
-          uniqueList.push(item);
-        } else if (!seen.has(item.orderId)) {
-          seen.add(item.orderId);
-          uniqueList.push(item);
+          item.isDuplicate = false;
+          return;
+        }
+        const count = orderCounts[item.orderId.trim()] || 0;
+        if (count > 1) {
+          item.isDuplicate = true;
+          item.dupCount = count;
+          dupItemsCount++;
         } else {
-          rem++;
+          item.isDuplicate = false;
+          item.status = "Unique";
         }
       });
-      extractedData = uniqueList;
+      return dupItemsCount;
+    }
+
+    // ডুপ্লিকেট মোছার নিরাপদ কনফার্মেশন ও ক্যান্সেল অপশন
+    function confirmRemoveDuplicates() {
+      const dupCount = extractedData.filter(i => i.isDuplicate).length;
+      if (dupCount === 0) {
+        alert("কোনো ডুপ্লিকেট রেকর্ড নেই!");
+        return;
+      }
+
+      const confirmed = confirm(`⚠️ মোট ${dupCount} টি ডুপ্লিকেট রেকর্ড পাওয়া গেছে।\n\nআপনি কি নিশ্চিত যে অতিরিক্ত ডুপ্লিকেটগুলো মুছে মূল (Original) অর্ডারটি সংরক্ষণ করতে চান?\n\n[ OK ] চাপলে মুছে যাবে, [ Cancel ] চাপলে কিছুই মুছবে না।`);
+
+      if (!confirmed) {
+        return; // ব্যবহারকারী Cancel চাপলে কোনো ডেটা মুছবে না
+      }
+
+      const seen = new Set();
+      const cleanList = [];
+      let removed = 0;
+
+      extractedData.forEach(item => {
+        if (item.status === "Returned" || item.status === "Cancelled") {
+          cleanList.push(item);
+        } else if (!seen.has(item.orderId)) {
+          seen.add(item.orderId);
+          item.isDuplicate = false;
+          item.status = "Unique";
+          cleanList.push(item);
+        } else {
+          removed++;
+        }
+      });
+
+      extractedData = cleanList;
+      refreshDuplicates();
       autoSaveAndSync();
       updateUI();
-      alert(`${rem} টি ডুপ্লিকেট সরানো হয়েছে!`);
+      alert(`✅ সফলভাবে ${removed} টি অতিরিক্ত ডুপ্লিকেট রেকর্ড মুছে ফেলা হয়েছে!`);
     }
 
     function clearData() {
@@ -723,7 +755,6 @@
       }
     }
 
-    // ফিল্টার লজিক
     function setDashboardFilter(val, type) {
       if (type === 'platform') {
         currentPlatformFilter = (currentPlatformFilter === val) ? 'ALL' : val;
@@ -763,32 +794,52 @@
       tableBody.innerHTML = '';
       let visible = 0;
 
-      extractedData.forEach((item, index) => {
-        // ফিল্টার ম্যাচিং
+      // ডুপ্লিকেট জোড়াগুলোকে পাশাপাশি রাখার জন্য সর্ট করা
+      let displayList = extractedData.map((item, originalIndex) => ({ ...item, originalIndex }));
+
+      displayList.sort((a, b) => {
+        // ডুপ্লিকেট হলে একই অর্ডার আইডির গুলো একসাথে পাশাপাশি থাকবে
+        if (a.isDuplicate && b.isDuplicate) {
+          if (a.orderId === b.orderId) {
+            return (a.uploadTime || '') < (b.uploadTime || '') ? -1 : 1;
+          }
+          return a.orderId.localeCompare(b.orderId);
+        }
+        if (a.isDuplicate) return -1;
+        if (b.isDuplicate) return 1;
+        return 0;
+      });
+
+      displayList.forEach((item) => {
         if (query && !item.orderId.toLowerCase().includes(query) && !item.trackingId.toLowerCase().includes(query)) return;
-        if (currentStatusFilter !== 'ALL' && item.status !== currentStatusFilter) return;
+        
+        // স্ট্যাটাস ফিল্টার
+        if (currentStatusFilter === 'Duplicate' && !item.isDuplicate) return;
+        if (currentStatusFilter !== 'ALL' && currentStatusFilter !== 'Duplicate' && item.status !== currentStatusFilter) return;
         if (currentPlatformFilter !== 'ALL' && item.platform !== currentPlatformFilter) return;
         if (currentCourierFilter !== 'ALL' && item.courier !== currentCourierFilter) return;
 
-        // আপলোড ডেট অনুযায়ী ফিল্টার
         let itemUploadDate = item.uploadDate || item.date;
         if (fromD && itemUploadDate < fromD) return;
         if (toD && itemUploadDate > toD) return;
 
         visible++;
         const tr = document.createElement('tr');
-        if (item.status === 'Returned') tr.className = 'row-returned';
-        if (item.status === 'Cancelled') tr.className = 'row-cancelled';
+        
+        // ডুপ্লিকেট হলে লাল ব্যাকগ্রাউন্ড হাইলাইট
+        if (item.isDuplicate) tr.className = 'row-duplicate';
+        else if (item.status === 'Returned') tr.className = 'row-returned';
+        else if (item.status === 'Cancelled') tr.className = 'row-cancelled';
 
         let badgeHtml = '';
-        if (item.status === 'Returned') {
-          badgeHtml = `<button class="status-badge badge-returned" onclick="openStatusModal(${index})">🔴 RETURNED ↩️</button>`;
+        if (item.isDuplicate) {
+          badgeHtml = `<span class="status-badge badge-duplicate">🔴 DUPLICATE (${item.dupCount})</span>`;
+        } else if (item.status === 'Returned') {
+          badgeHtml = `<button class="status-badge badge-returned" onclick="openStatusModal(${item.originalIndex})">🔴 RETURNED ↩️</button>`;
         } else if (item.status === 'Cancelled') {
-          badgeHtml = `<button class="status-badge badge-cancelled" onclick="openStatusModal(${index})">🟡 CANCELLED ↩️</button>`;
-        } else if (item.status === 'Duplicate') {
-          badgeHtml = `<span class="status-badge badge-duplicate">DUPLICATE</span>`;
+          badgeHtml = `<button class="status-badge badge-cancelled" onclick="openStatusModal(${item.originalIndex})">🟡 CANCELLED ↩️</button>`;
         } else {
-          badgeHtml = `<button class="status-badge badge-unique" onclick="openStatusModal(${index})">🟢 DISPATCHED ↩️</button>`;
+          badgeHtml = `<button class="status-badge badge-unique" onclick="openStatusModal(${item.originalIndex})">🟢 DISPATCHED ↩️</button>`;
         }
 
         let trackingHtml = item.trackingId;
@@ -799,15 +850,15 @@
         let labelDisplay = item.labelDate || item.date || '-';
 
         tr.innerHTML = `
-          <td>${index + 1}</td>
+          <td>${visible}</td>
           <td>${badgeHtml}</td>
           <td style="color:#38bdf8; font-weight:bold;">${uploadDisplay}</td>
           <td style="color:#94a3b8;">${labelDisplay}</td>
           <td><b>${item.platform}</b></td>
           <td>${item.courier}</td>
-          <td style="font-weight:bold;">${item.orderId}</td>
+          <td style="font-weight:bold; color:${item.isDuplicate ? '#fda4af' : 'inherit'};">${item.orderId}</td>
           <td>${trackingHtml}</td>
-          <td style="text-align:center;"><button class="btn-del-row" onclick="deleteRow(${index})">❌</button></td>
+          <td style="text-align:center;"><button class="btn-del-row" onclick="deleteRow(${item.originalIndex})">❌</button></td>
         `;
         tableBody.appendChild(tr);
       });
@@ -832,6 +883,7 @@
       let amz = extractedData.filter(i => i.platform === "Amazon");
       let fk = extractedData.filter(i => i.platform === "Flipkart");
       let msh = extractedData.filter(i => i.platform === "Meesho");
+      let dup = extractedData.filter(i => i.isDuplicate).length;
       let can = extractedData.filter(i => i.status === "Cancelled").length;
       let ret = extractedData.filter(i => i.status === "Returned").length;
 
@@ -845,10 +897,10 @@
       document.getElementById('cardMsh').innerText = msh.length;
       document.getElementById('subMsh').innerText = `রিটার্ন: ${msh.filter(i => i.status === 'Returned').length} | ক্যানসেল: ${msh.filter(i => i.status === 'Cancelled').length}`;
 
+      document.getElementById('cardDup').innerText = dup;
       document.getElementById('cardCan').innerText = can;
       document.getElementById('cardRet').innerText = ret;
 
-      // কুরিয়ার সামারি গ্রিড
       const courierStats = {};
       extractedData.forEach(item => {
         if (!courierStats[item.courier]) courierStats[item.courier] = { total: 0, ret: 0 };
@@ -868,12 +920,12 @@
 
       let msg = `📊 মোট এন্ট্রি: <b>${total}</b> টি`;
       if (addedCount) msg += ` | <span style="color:#10b981;">(নতুন যোগ হয়েছে: ${addedCount} টি)</span>`;
+      if (dup > 0) msg += ` | <span style="color:#f43f5e; font-weight:bold;">(⚠️ ডুপ্লিকেট পার্সেল আছে: ${dup} টি)</span>`;
       document.getElementById('statusBox').innerHTML = msg;
 
       applyFilters();
     }
 
-    // স্মার্ট এক্সপোর্ট
     function openExportModal() {
       if (extractedData.length === 0) return alert("শেয়ার করার মতো ডেটা নেই!");
       document.getElementById('exportModal').style.display = 'flex';
@@ -894,11 +946,12 @@
 
       if (list.length === 0) return alert("এই ক্যাটাগরিতে কোনো অর্ডার নেই!");
 
-      let csv = "\uFEFFআপলোড সময়,লেবেল তারিখ,প্ল্যাটফর্ম,কুরিয়ার পার্টনার,অর্ডার আইডি,ট্র্যাকিং আইডি,স্ট্যাটাস\n";
+      let csv = "\uFEFFআপলোড সময়,লেবেল তারিখ,প্ল্যাটফর্ম,কুরিয়ার পার্টনার,অর্ডার আইডি,ট্র্যাকিং আইডি,স্ট্যাটাস,ডুপ্লিকেট\n";
       list.forEach(row => {
         let upTime = row.uploadTime || row.date || '';
         let lblDate = row.labelDate || row.date || '';
-        csv += `"${upTime}","${lblDate}","${row.platform}","${row.courier}","${row.orderId}","${row.trackingId}","${row.status}"\n`;
+        let isDup = row.isDuplicate ? "DUPLICATE" : "NO";
+        csv += `"${upTime}","${lblDate}","${row.platform}","${row.courier}","${row.orderId}","${row.trackingId}","${row.status}","${isDup}"\n`;
       });
 
       const fileName = `${titlePrefix}_${new Date().toISOString().slice(0,10)}.csv`;
