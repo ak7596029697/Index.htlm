@@ -256,7 +256,6 @@
         <select id="extractorFileSelect" class="filter-input" style="width:100%; margin-top:4px;" onchange="updateSuggestedPages()"></select>
       </div>
 
-      <!-- পরবর্তীতে ফাইল লিঙ্ক হারিয়ে গেলে রি-সিলেক্ট বক্স -->
       <div id="fileReloadBox" style="display:none; background:rgba(245, 158, 11, 0.15); border:1px dashed #f59e0b; padding:8px; border-radius:6px; margin-bottom:10px;">
         <p style="font-size:11px; color:#fbbf24; margin-bottom:4px;">⚠️ ফাইলটি রিলোড করতে নিচের বোতামে চাপ দিয়ে মূল PDF বেছে নিন:</p>
         <input type="file" id="reselectPdfInput" accept="application/pdf" style="display:block; font-size:11px; color:#fff;" onchange="loadPDFBufferDirectly(this)">
@@ -341,9 +340,10 @@
       return ocrWorker;
     }
 
+    // আপগ্রেডেড ফ্লেক্সিবল রেজেক্স (হাইফেনের পাশে স্পেস থাকলেও যাতে মিস না হয়)
     const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
-    const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
-    const meeshoOrderRegex   = /\b\d{16,20}_\d+\b/;
+    const amazonOrderRegex   = /\b\d{3}\s*-\s*\d{7}\s*-\s*\d{7}\b/;
+    const meeshoOrderRegex   = /\b\d{16,20}(?:_\d+|\s+\d+)\b/;
 
     function extractSkuId(text, platform) {
       if (!text) return "";
@@ -353,7 +353,7 @@
         if (val.length > 2 && val.toUpperCase() !== "ID" && val.toUpperCase() !== "NO") return val;
       }
       if (platform === "Meesho") {
-        let mMatch = text.match(/(?:Product\s*(?:Name|Title)?[:\s\n]*)([A-Za-z0-9_\-\.\/]+)/i) ||
+        let mMatch = text.match(/(?:SKU[:\s\n]*)([A-Za-z0-9_\-\.\/]+)/i) ||
                      text.match(/\b([A-Za-z0-9_-]{4,25})\s*\|\s*(?:Size|Color|Qty)\b/i);
         if (mMatch && mMatch[1]) return mMatch[1].trim();
       }
@@ -362,8 +362,9 @@
         if (fkMatch && fkMatch[1]) return fkMatch[1].trim();
       }
       if (platform === "Amazon") {
-        let amzSku = text.match(/(?:FNSKU|MSKU)[:\s#-]*([A-Za-z0-9_\-]+)/i);
-        if (amzSku && amzSku[1]) return amzSku[1].trim();
+        let amzSku = text.match(/(?:ITEM\s*TYPE|DESCRIPTION)[:\s\n\-\|]*([A-Za-z0-9_\-\s\(\)]+)/i) ||
+                     text.match(/(?:FNSKU|MSKU)[:\s#-]*([A-Za-z0-9_\-]+)/i);
+        if (amzSku && amzSku[1]) return amzSku[1].trim().split('\n')[0];
       }
       return "";
     }
@@ -405,8 +406,8 @@
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
 
         const cropCanvas = document.getElementById('cropCanvas');
-        cropCanvas.width = canvas.width * 0.55;
-        cropCanvas.height = canvas.height * 0.22;
+        cropCanvas.width = canvas.width;
+        cropCanvas.height = canvas.height * 0.40;
         const cropCtx = cropCanvas.getContext('2d');
         cropCtx.drawImage(canvas, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, cropCanvas.width, cropCanvas.height);
 
@@ -431,12 +432,14 @@
     }
 
     function findTrackingNumber(text, rawOrderId, platform) {
-      const pureOrderId = rawOrderId.replace(/_\d+$/, '');
+      const pureOrderId = rawOrderId.replace(/[^0-9]/g, '');
+
+      // ডাইরেক্ট AWB নম্বর চেক
+      const directAwb = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
+      if (directAwb && directAwb[1]) return directAwb[1].trim();
+
       const sfDirect = text.match(/\bSF\s*([0-9]{8,14}\s*[A-Z]{0,5})\b/i);
       if (sfDirect && sfDirect[1]) return ("SF" + sfDirect[1].replace(/\s+/g, '')).toUpperCase();
-
-      const amzAwb = text.match(/\bAWB\s*([0-9]{10,16})\b/i);
-      if (amzAwb && amzAwb[1]) return amzAwb[1].trim();
 
       const tagMatch = text.match(/(?:AWB|TRACKING|WAYBILL|WBN|AIRWAY\s*BILL)[:\s#-]*([A-Z0-9]{10,22})/i);
       if (tagMatch && tagMatch[1] && !tagMatch[1].trim().includes(pureOrderId)) return tagMatch[1].trim();
@@ -464,6 +467,7 @@
       setTimeout(() => { statusBox.style.color = '#38bdf8'; updateUI(); }, 2000);
     }
 
+    // স্মার্ট মাল্টিপল পিডিএফ রিডার
     async function processMultiplePDFs(input) {
       const files = Array.from(input.files);
       if (!files || files.length === 0) return;
@@ -487,26 +491,32 @@
             const items = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
             const pageText = items.join(' ');
 
-            if (items.length === 0 || pageText.includes("AWB") || pageText.length < 50) {
+            let platform = "অন্যান্য";
+            let orderId = "";
+
+            // প্ল্যাটফর্ম ডিটেকশন ও অর্ডার আইডি বের করা
+            if (amazonOrderRegex.test(pageText) || /ATSPL|amazon\.in/i.test(pageText)) {
+              platform = "Amazon";
+              const m = pageText.match(amazonOrderRegex);
+              if (m) {
+                // স্পেস থাকলে দূর করে ক্লিন অর্ডার আইডি তৈরি
+                orderId = m[0].replace(/\s+/g, '');
+              }
+            } else if (flipkartOrderRegex.test(pageText)) {
+              platform = "Flipkart";
+              orderId = pageText.match(flipkartOrderRegex)[0];
+            } else if (meeshoOrderRegex.test(pageText)) {
+              platform = "Meesho";
+              orderId = pageText.match(meeshoOrderRegex)[0].replace(/\s+/g, '_');
+            }
+
+            // টেক্সট না পেলে OCR চালানো
+            if (!orderId || pageText.length < 60) {
               let awb = await extractAmazonAWBFromImage(page);
               if (awb) pendingAmazonAWB = awb;
             }
 
-            let platform = "অন্যান্য";
-            let orderId = "";
-
-            if (flipkartOrderRegex.test(pageText)) {
-              platform = "Flipkart";
-              orderId = pageText.match(flipkartOrderRegex)[0];
-            } else if (amazonOrderRegex.test(pageText)) {
-              platform = "Amazon";
-              orderId = pageText.match(amazonOrderRegex)[0];
-            } else if (meeshoOrderRegex.test(pageText)) {
-              platform = "Meesho";
-              orderId = pageText.match(meeshoOrderRegex)[0];
-            }
-
-            if (orderId) {
+            if (orderId || pendingAmazonAWB) {
               let trackingId = findTrackingNumber(pageText, orderId, platform);
               if ((trackingId === "নেই" || platform === "Amazon") && pendingAmazonAWB) trackingId = pendingAmazonAWB;
               let courier = detectCourier(pageText, trackingId, platform);
@@ -520,7 +530,7 @@
                 labelDate: labelDate,
                 platform: platform,
                 courier: courier,
-                orderId: orderId,
+                orderId: orderId || ("AMZ-" + trackingId),
                 skuId: skuId,
                 trackingId: trackingId,
                 status: "Unique",
@@ -593,12 +603,13 @@
       });
 
       if (!found) {
-        let isOrder = amazonOrderRegex.test(key) || flipkartOrderRegex.test(key) || meeshoOrderRegex.test(key);
+        let cleanKey = key.replace(/\s+/g, '');
+        let isOrder = amazonOrderRegex.test(cleanKey) || flipkartOrderRegex.test(cleanKey) || meeshoOrderRegex.test(cleanKey);
         let pForm = "অন্যান্য";
-        let cName = detectCourier("", key, "অন্যান্য");
-        if (amazonOrderRegex.test(key)) { pForm = "Amazon"; cName = "Amazon Shipping (ATS)"; }
-        else if (flipkartOrderRegex.test(key)) { pForm = "Flipkart"; cName = "Ekart"; }
-        else if (meeshoOrderRegex.test(key)) { pForm = "Meesho"; }
+        let cName = detectCourier("", cleanKey, "অন্যান্য");
+        if (amazonOrderRegex.test(cleanKey)) { pForm = "Amazon"; cName = "Amazon Shipping (ATS)"; }
+        else if (flipkartOrderRegex.test(cleanKey)) { pForm = "Flipkart"; cName = "Ekart"; }
+        else if (meeshoOrderRegex.test(cleanKey)) { pForm = "Meesho"; }
 
         let live = getLiveTimestamp();
 
@@ -608,9 +619,9 @@
           labelDate: "-",
           platform: pForm,
           courier: cName,
-          orderId: isOrder ? key : "ম্যানুয়াল এন্ট্রি",
+          orderId: isOrder ? cleanKey : "ম্যানুয়াল এন্ট্রি",
           skuId: "",
-          trackingId: isOrder ? "নেই" : key,
+          trackingId: isOrder ? "নেই" : cleanKey,
           status: newStatus,
           fileName: "-",
           pageNumber: "-"
@@ -937,7 +948,6 @@
       }
     }
 
-    // আপডেটেড UI ফাংশন: extractorBtn এখন ডেটা থাকলেই সবসময় দৃশ্যমান থাকবে
     function updateUI(addedCount = null) {
       const hasData = extractedData.length > 0;
       document.getElementById('dashboardCards').style.display = hasData ? 'grid' : 'none';
@@ -945,10 +955,7 @@
       document.getElementById('filterWrapper').style.display = hasData ? 'block' : 'none';
       document.getElementById('resultsBox').style.display = hasData ? 'block' : 'none';
       document.getElementById('saveBtn').style.display = hasData ? 'inline-block' : 'none';
-      
-      // গুরুত্বপূর্ণ ফিক্স: ডেটাবেসে ডেটা থাকলে এক্সট্রাক্টর বাটন সবসময় থাকবে!
       document.getElementById('extractorBtn').style.display = hasData ? 'inline-block' : 'none';
-      
       document.getElementById('exportBtn').style.display = hasData ? 'inline-block' : 'none';
       document.getElementById('removeDupBtn').style.display = hasData ? 'inline-block' : 'none';
       document.getElementById('clearBtn').style.display = hasData ? 'inline-block' : 'none';
@@ -1000,9 +1007,7 @@
       applyFilters();
     }
 
-    // স্মার্ট এক্সট্রাক্টর মডাল ওপেনিং
     function openSmartExtractorModal() {
-      // ডেটাবেসে থাকা সমস্ত ইউনিক ফাইলের নাম সংগ্রহ করা
       const dbFileNames = Array.from(new Set(
         extractedData.map(i => i.fileName).filter(n => n && n !== "-")
       ));
@@ -1030,7 +1035,6 @@
       checkIfFileInBuffer();
     }
 
-    // চেক করা যে ফাইলটি কি মেমরিতে আছে নাকি রি-সিলেক্ট করতে হবে
     function checkIfFileInBuffer() {
       const selectedFile = document.getElementById('extractorFileSelect').value;
       const reloadBox = document.getElementById('fileReloadBox');
@@ -1045,7 +1049,6 @@
       const file = input.files[0];
       if (!file) return;
       const arrayBuffer = await file.arrayBuffer();
-      // নির্বাচিত ফাইলের নামেই বাফার সংরক্ষণ
       const currentSelectedName = document.getElementById('extractorFileSelect').value;
       loadedFilesMap[currentSelectedName] = arrayBuffer;
       loadedFilesMap[file.name] = arrayBuffer;
