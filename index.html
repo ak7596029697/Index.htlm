@@ -7,14 +7,16 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- ফ্রেশ পিডিএফ তৈরি ও পেজ কাটার জন্য PDF-Lib লাইব্রেরি -->
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 15px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-    .container { width: 100%; max-width: 1100px; background: #1e293b; border-radius: 12px; padding: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    .container { width: 100%; max-width: 1150px; background: #1e293b; border-radius: 12px; padding: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
     h1 { font-size: 19px; color: #38bdf8; text-align: center; margin-bottom: 4px; }
     p.subtitle { font-size: 12px; color: #94a3b8; text-align: center; margin-bottom: 15px; }
 
-    /* প্ল্যাটফর্ম ড্যাশবোর্ড কার্ড */
+    /* ড্যাশবোর্ড কার্ড */
     .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
     .metric-card { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: all 0.2s; }
     .metric-card:hover, .metric-card.active { border-color: #38bdf8; transform: translateY(-2px); }
@@ -22,7 +24,7 @@
     .metric-value { font-size: 18px; font-weight: bold; margin-top: 2px; }
     .metric-sub { font-size: 10px; margin-top: 3px; }
 
-    /* কুরিয়ার পার্টনার মিনি গ্রিড */
+    /* কুরিয়ার মিনি গ্রিড */
     .courier-summary-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
     .courier-chip { background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 4px 8px; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
     .courier-chip:hover, .courier-chip.active { border-color: #38bdf8; background: #334155; }
@@ -53,9 +55,10 @@
     
     .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
     button.action-btn { padding: 9px 12px; font-size: 12px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
-    .btn-save { background: #3b82f6; color: white; display: none; flex: 1.5; }
-    .btn-export { background: #10b981; color: white; display: none; flex: 2; }
-    .btn-remove-dup { background: #e11d48; color: white; display: none; flex: 1.5; }
+    .btn-save { background: #3b82f6; color: white; display: none; flex: 1.2; }
+    .btn-extractor { background: #8b5cf6; color: white; display: none; flex: 1.8; }
+    .btn-export { background: #10b981; color: white; display: none; flex: 1.5; }
+    .btn-remove-dup { background: #e11d48; color: white; display: none; flex: 1.2; }
     .btn-clear { background: #ef4444; color: white; display: none; width: 40px; }
 
     /* ফিল্টার এরিয়া */
@@ -74,21 +77,21 @@
     /* স্ট্যাটাস বাটন ও হাইলাইট */
     .status-badge { padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: sans-serif; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; border: none; font-size: 11px; }
     .badge-unique { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-    .badge-duplicate { background: #e11d48; color: #ffffff; border: 1px solid #fda4af; animation: pulse 1.5s infinite; }
+    .badge-duplicate { background: #e11d48; color: #ffffff; border: 1px solid #fda4af; }
     .badge-cancelled { background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid #f59e0b; }
     .badge-returned { background: #ef4444; color: #fff; }
 
-    /* এক্সেলে যেমন ডুপ্লিকেট দুটোই লাল হাইলাইট হয় */
     .row-duplicate { background: rgba(225, 29, 72, 0.22) !important; border-left: 4px solid #e11d48; }
     .row-returned { background: rgba(239, 68, 68, 0.15) !important; }
     .row-cancelled { background: rgba(245, 158, 11, 0.1) !important; }
 
     .btn-del-row { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 13px; }
     .track-link { color: #38bdf8; text-decoration: underline; font-weight: bold; }
+    .page-pill { background: #334155; color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
 
     /* মডাল */
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; align-items: center; justify-content: center; padding: 20px; }
-    .modal-box { width: 100%; max-width: 360px; background: #1e293b; border-radius: 10px; padding: 16px; border: 1px solid #38bdf8; }
+    .modal-box { width: 100%; max-width: 440px; background: #1e293b; border-radius: 10px; padding: 16px; border: 1px solid #38bdf8; }
     .modal-opt-btn { width: 100%; padding: 10px; margin-top: 8px; border-radius: 6px; border: none; font-weight: bold; font-size: 12px; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 8px; }
   </style>
 </head>
@@ -96,7 +99,7 @@
 
   <div class="container">
     <h1>📄 Dispatch & Return Order Manager</h1>
-    <p class="subtitle">Amazon, Flipkart ও Meesho স্মার্ট ট্র্যাকিং ও সেভ সিস্টেম</p>
+    <p class="subtitle">Amazon, Flipkart ও Meesho স্মার্ট ট্র্যাকিং ও স্মার্ট লেবেল এক্সট্রাক্টর</p>
 
     <!-- ড্যাশবোর্ড কার্ড -->
     <div class="dashboard-grid" id="dashboardCards" style="display:none;">
@@ -175,12 +178,13 @@
 
     <div class="controls">
       <button class="action-btn btn-save" id="saveBtn" onclick="manualSaveToMemory()">💾 মেমরিতে সেভ</button>
-      <button class="action-btn btn-export" id="exportBtn" onclick="openExportModal()">📤 Excel রিপোর্ট সেভ ও শেয়ার</button>
+      <button class="action-btn btn-extractor" id="extractorBtn" onclick="openSmartExtractorModal()">📑 ফ্রেশ PDF জেনারেট / প্রিন্ট</button>
+      <button class="action-btn btn-export" id="exportBtn" onclick="openExportModal()">📤 Excel সেভ ও শেয়ার</button>
       <button class="action-btn btn-remove-dup" id="removeDupBtn" onclick="confirmRemoveDuplicates()">🧹 ডুপ্লিকেট মুছুন</button>
       <button class="action-btn btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️</button>
     </div>
 
-    <!-- ফিল্টার ও ডেট রেঞ্জ এরিয়া -->
+    <!-- ফিল্টার ও ডেট রেঞ্জ -->
     <div class="filter-wrapper" id="filterWrapper">
       <div class="filter-row">
         <input type="text" id="searchInput" class="filter-input" style="flex:2; min-width:180px;" placeholder="🔍 যে কোনো ID লিখে খুঁজুন..." oninput="applyFilters()">
@@ -204,12 +208,13 @@
           <tr>
             <th>#</th>
             <th>স্ট্যাটাস</th>
-            <th>আপলোড সময় (রিয়েল-টাইম)</th>
+            <th>PDF পেজ নং</th>
+            <th>আপলোড সময়</th>
             <th>লেবেল তারিখ</th>
             <th>প্ল্যাটফর্ম</th>
             <th>কুরিয়ার</th>
             <th>অর্ডার আইডি</th>
-            <th>ট্র্যাকিং আইডি (AWB)</th>
+            <th>ট্র্যাকিং আইডি</th>
             <th style="text-align:center;">মুছুন</th>
           </tr>
         </thead>
@@ -241,6 +246,34 @@
     </div>
   </div>
 
+  <!-- স্মার্ট এক্সট্রাক্টর মডাল (ডাউনলোড ও সরাসরি প্রিন্ট সুবিধা সহ) -->
+  <div class="modal-overlay" id="extractorModal">
+    <div class="modal-box">
+      <h3 style="color:#8b5cf6; font-size:14px; margin-bottom:6px;">📑 স্মার্ট লেবেল এক্সট্রাক্টর ও প্রিন্টার</h3>
+      <p style="font-size:11px; color:#94a3b8; margin-bottom:10px;">প্রিন্টারের মতো পেজ নম্বর বেছে ফ্রেশ PDF তৈরি বা সরাসরি প্রিন্ট করুন:</p>
+
+      <div style="margin-bottom:8px;">
+        <label style="font-size:11px; color:#38bdf8; font-weight:bold;">PDF ফাইল নির্বাচন করুন:</label>
+        <select id="extractorFileSelect" class="filter-input" style="width:100%; margin-top:4px;" onchange="updateSuggestedPages()"></select>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="font-size:11px; color:#34d399; font-weight:bold;">প্রিন্ট/ডাউনলোডের পেজ নম্বর লিখুন (উদা: 1, 3, 5-7):</label>
+        <input type="text" id="pageNumberInput" class="filter-input" style="width:100%; margin-top:4px; font-weight:bold; color:#38bdf8;" placeholder="যেমন: 1, 3, 5">
+      </div>
+
+      <div style="display:flex; gap:6px; margin-bottom:12px;">
+        <button style="flex:1; background:#0284c7; color:#fff; border:none; padding:7px; border-radius:4px; font-size:11px; cursor:pointer;" onclick="selectOnlyUniquePages()">✨ শুধু ইউনিক পেজগুলো নিন</button>
+        <button style="flex:1; background:#334155; color:#fff; border:none; padding:7px; border-radius:4px; font-size:11px; cursor:pointer;" onclick="selectAllPages()">📑 সব পেজ নিন</button>
+      </div>
+
+      <!-- প্রিন্ট ও ডাউনলোডের দুটি অপশন -->
+      <button class="modal-opt-btn" style="background:#3b82f6; color:#fff; justify-content:center;" onclick="directPrintPDF()">🖨️ সরাসরি প্রিন্ট করুন (Print Dialog)</button>
+      <button class="modal-opt-btn" style="background:#10b981; color:#fff; justify-content:center;" onclick="generateFilteredPDF()">💾 ফ্রেশ PDF ডাউনলোড করুন</button>
+      <button class="modal-opt-btn" style="background:#334155; color:#fff; text-align:center; justify-content:center;" onclick="document.getElementById('extractorModal').style.display='none'">বন্ধ করুন</button>
+    </div>
+  </div>
+
   <!-- এক্সেল এক্সপোর্ট মডাল -->
   <div class="modal-overlay" id="exportModal">
     <div class="modal-box">
@@ -253,6 +286,9 @@
     </div>
   </div>
 
+  <!-- সরাসরি প্রিন্টের জন্য ব্যাকগ্রাউন্ড আইফ্রেম -->
+  <iframe id="printFrame" style="display:none;"></iframe>
+
   <!-- OCR ক্যানভাস -->
   <canvas id="hiddenCanvas" style="display:none;"></canvas>
   <canvas id="cropCanvas" style="display:none;"></canvas>
@@ -261,6 +297,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
     let extractedData = JSON.parse(localStorage.getItem('my_orders_db') || '[]');
+    let loadedFilesMap = {};
     let ocrWorker = null;
     let html5QrScanner = null;
     let currentScanMode = 'return';
@@ -415,7 +452,9 @@
         const file = files[f];
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          loadedFilesMap[file.name] = arrayBuffer;
+
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
           let pendingAmazonAWB = "";
 
           for (let p = 1; p <= pdf.numPages; p++) {
@@ -458,7 +497,9 @@
                 courier: courier,
                 orderId: orderId,
                 trackingId: trackingId,
-                status: "Unique"
+                status: "Unique",
+                fileName: file.name,
+                pageNumber: p
               });
               pendingAmazonAWB = "";
             }
@@ -543,7 +584,9 @@
           courier: cName,
           orderId: isOrder ? key : "ম্যানুয়াল এন্ট্রি",
           trackingId: isOrder ? "নেই" : key,
-          status: newStatus
+          status: newStatus,
+          fileName: "-",
+          pageNumber: "-"
         });
       }
 
@@ -593,7 +636,9 @@
                 courier: detectCourier("", cleanCode, "অন্যান্য"),
                 orderId: "স্ক্যান ডিসপ্যাচ",
                 trackingId: cleanCode,
-                status: "Unique"
+                status: "Unique",
+                fileName: "-",
+                pageNumber: "-"
               });
               document.getElementById('scanner-last-code').innerHTML = `✅ সেভ হয়েছে: ${cleanCode}`;
             } else {
@@ -618,7 +663,9 @@
                 courier: detectCourier("", cleanCode, "অন্যান্য"),
                 orderId: "স্ক্যান রিটার্ন",
                 trackingId: cleanCode,
-                status: "Returned"
+                status: "Returned",
+                fileName: "-",
+                pageNumber: "-"
               });
             }
             document.getElementById('scanner-last-code').innerHTML = `🔴 রিটার্ন চিহ্নিত: ${cleanCode}`;
@@ -651,7 +698,7 @@
     function openStatusModal(index) {
       targetRowIndex = index;
       const item = extractedData[index];
-      document.getElementById('modalOrderLabel').innerText = `অর্ডার: ${item.orderId} | ট্র্যাকিং: ${item.trackingId}`;
+      document.getElementById('modalOrderLabel').innerText = `অর্ডার: ${item.orderId} | পেজ: ${item.pageNumber || '-'}`;
       document.getElementById('statusModal').style.display = 'flex';
     }
 
@@ -681,7 +728,6 @@
       updateUI();
     }
 
-    // ডুপ্লিকেট দুটোকেই লাল হাইলাইট ও ট্র্যাকিং করার নির্ভুল লজিক
     function refreshDuplicates() {
       const orderCounts = {};
       extractedData.forEach(item => {
@@ -709,7 +755,6 @@
       return dupItemsCount;
     }
 
-    // ডুপ্লিকেট মোছার নিরাপদ কনফার্মেশন ও ক্যান্সেল অপশন
     function confirmRemoveDuplicates() {
       const dupCount = extractedData.filter(i => i.isDuplicate).length;
       if (dupCount === 0) {
@@ -717,11 +762,9 @@
         return;
       }
 
-      const confirmed = confirm(`⚠️ মোট ${dupCount} টি ডুপ্লিকেট রেকর্ড পাওয়া গেছে।\n\nআপনি কি নিশ্চিত যে অতিরিক্ত ডুপ্লিকেটগুলো মুছে মূল (Original) অর্ডারটি সংরক্ষণ করতে চান?\n\n[ OK ] চাপলে মুছে যাবে, [ Cancel ] চাপলে কিছুই মুছবে না।`);
+      const confirmed = confirm(`⚠️ মোট ${dupCount} টি ডুপ্লিকেট রেকর্ড পাওয়া গেছে।\n\nআপনি কি নিশ্চিত যে অতিরিক্ত ডুপ্লিকেটগুলো মুছে মূল অর্ডারটি সংরক্ষণ করতে চান?\n\n[ OK ] চাপলে মুছে যাবে, [ Cancel ] চাপলে কিছুই মুছবে না।`);
 
-      if (!confirmed) {
-        return; // ব্যবহারকারী Cancel চাপলে কোনো ডেটা মুছবে না
-      }
+      if (!confirmed) return;
 
       const seen = new Set();
       const cleanList = [];
@@ -750,6 +793,7 @@
     function clearData() {
       if (confirm("⚠️ সমস্ত ডেটা মুছে ফেলতে চান? এটি আর ফিরিয়ে আনা যাবে না!")) {
         extractedData = [];
+        loadedFilesMap = {};
         localStorage.removeItem('my_orders_db');
         updateUI();
       }
@@ -794,11 +838,9 @@
       tableBody.innerHTML = '';
       let visible = 0;
 
-      // ডুপ্লিকেট জোড়াগুলোকে পাশাপাশি রাখার জন্য সর্ট করা
       let displayList = extractedData.map((item, originalIndex) => ({ ...item, originalIndex }));
 
       displayList.sort((a, b) => {
-        // ডুপ্লিকেট হলে একই অর্ডার আইডির গুলো একসাথে পাশাপাশি থাকবে
         if (a.isDuplicate && b.isDuplicate) {
           if (a.orderId === b.orderId) {
             return (a.uploadTime || '') < (b.uploadTime || '') ? -1 : 1;
@@ -813,7 +855,6 @@
       displayList.forEach((item) => {
         if (query && !item.orderId.toLowerCase().includes(query) && !item.trackingId.toLowerCase().includes(query)) return;
         
-        // স্ট্যাটাস ফিল্টার
         if (currentStatusFilter === 'Duplicate' && !item.isDuplicate) return;
         if (currentStatusFilter !== 'ALL' && currentStatusFilter !== 'Duplicate' && item.status !== currentStatusFilter) return;
         if (currentPlatformFilter !== 'ALL' && item.platform !== currentPlatformFilter) return;
@@ -826,7 +867,6 @@
         visible++;
         const tr = document.createElement('tr');
         
-        // ডুপ্লিকেট হলে লাল ব্যাকগ্রাউন্ড হাইলাইট
         if (item.isDuplicate) tr.className = 'row-duplicate';
         else if (item.status === 'Returned') tr.className = 'row-returned';
         else if (item.status === 'Cancelled') tr.className = 'row-cancelled';
@@ -846,14 +886,14 @@
         const trackUrl = getTrackingUrl(item.courier, item.trackingId);
         if (trackUrl) trackingHtml = `<a class="track-link" href="${trackUrl}" target="_blank">${item.trackingId} 🔗</a>`;
 
-        let uploadDisplay = item.uploadTime || item.date || '-';
-        let labelDisplay = item.labelDate || item.date || '-';
+        let pageHtml = item.pageNumber ? `<span class="page-pill">Pg ${item.pageNumber}</span>` : '-';
 
         tr.innerHTML = `
           <td>${visible}</td>
           <td>${badgeHtml}</td>
-          <td style="color:#38bdf8; font-weight:bold;">${uploadDisplay}</td>
-          <td style="color:#94a3b8;">${labelDisplay}</td>
+          <td>${pageHtml}</td>
+          <td style="color:#38bdf8; font-weight:bold;">${item.uploadTime || item.date || '-'}</td>
+          <td style="color:#94a3b8;">${item.labelDate || item.date || '-'}</td>
           <td><b>${item.platform}</b></td>
           <td>${item.courier}</td>
           <td style="font-weight:bold; color:${item.isDuplicate ? '#fda4af' : 'inherit'};">${item.orderId}</td>
@@ -864,7 +904,7 @@
       });
 
       if (visible === 0 && extractedData.length > 0) {
-        tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:#94a3b8; padding:20px;">এই ফিল্টারে কোনো রেকর্ড পাওয়া যায়নি!</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:#94a3b8; padding:20px;">এই ফিল্টারে কোনো রেকর্ড পাওয়া যায়নি!</td></tr>`;
       }
     }
 
@@ -875,6 +915,7 @@
       document.getElementById('filterWrapper').style.display = hasData ? 'block' : 'none';
       document.getElementById('resultsBox').style.display = hasData ? 'block' : 'none';
       document.getElementById('saveBtn').style.display = hasData ? 'inline-block' : 'none';
+      document.getElementById('extractorBtn').style.display = Object.keys(loadedFilesMap).length > 0 ? 'inline-block' : 'none';
       document.getElementById('exportBtn').style.display = hasData ? 'inline-block' : 'none';
       document.getElementById('removeDupBtn').style.display = hasData ? 'inline-block' : 'none';
       document.getElementById('clearBtn').style.display = hasData ? 'inline-block' : 'none';
@@ -926,6 +967,159 @@
       applyFilters();
     }
 
+    function openSmartExtractorModal() {
+      const fileNames = Object.keys(loadedFilesMap);
+      if (fileNames.length === 0) {
+        alert("কোনো PDF ফাইল মেমরিতে নেই! অনুগ্রহ করে শিপিং লেবেল আপলোড করুন।");
+        return;
+      }
+
+      const select = document.getElementById('extractorFileSelect');
+      select.innerHTML = '';
+      fileNames.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.innerText = name;
+        select.appendChild(opt);
+      });
+
+      updateSuggestedPages();
+      document.getElementById('extractorModal').style.display = 'flex';
+    }
+
+    function updateSuggestedPages() {
+      selectOnlyUniquePages();
+    }
+
+    function selectOnlyUniquePages() {
+      const selectedFile = document.getElementById('extractorFileSelect').value;
+      if (!selectedFile) return;
+
+      const uniquePages = extractedData
+        .filter(item => item.fileName === selectedFile && !item.isDuplicate && item.status !== 'Cancelled' && item.status !== 'Returned')
+        .map(item => item.pageNumber)
+        .filter(p => typeof p === 'number')
+        .sort((a,b) => a - b);
+
+      document.getElementById('pageNumberInput').value = uniquePages.join(', ');
+    }
+
+    function selectAllPages() {
+      const selectedFile = document.getElementById('extractorFileSelect').value;
+      if (!selectedFile) return;
+
+      const allPages = extractedData
+        .filter(item => item.fileName === selectedFile && typeof item.pageNumber === 'number')
+        .map(item => item.pageNumber)
+        .sort((a,b) => a - b);
+
+      const uniqueSet = Array.from(new Set(allPages));
+      document.getElementById('pageNumberInput').value = uniqueSet.join(', ');
+    }
+
+    function parsePageNumbers(inputStr, maxPages) {
+      const pages = new Set();
+      const parts = inputStr.split(',');
+      for (let part of parts) {
+        part = part.trim();
+        if (part.includes('-')) {
+          const [start, end] = part.split('-').map(n => parseInt(n.trim()));
+          if (!isNaN(start) && !isNaN(end)) {
+            for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
+              if (i >= 1 && i <= maxPages) pages.add(i);
+            }
+          }
+        } else {
+          const num = parseInt(part);
+          if (!isNaN(num) && num >= 1 && num <= maxPages) pages.add(num);
+        }
+      }
+      return Array.from(pages).sort((a,b) => a - b);
+    }
+
+    async function buildExtractedPDFBytes() {
+      const selectedFileName = document.getElementById('extractorFileSelect').value;
+      const inputStr = document.getElementById('pageNumberInput').value.trim();
+
+      if (!inputStr) {
+        alert("অনুগ্রহ করে অন্তত একটি পেজ নম্বর লিখুন!");
+        return null;
+      }
+
+      const fileBuffer = loadedFilesMap[selectedFileName];
+      if (!fileBuffer) {
+        alert("ফাইলটি মেমরিতে পাওয়া যায়নি!");
+        return null;
+      }
+
+      const srcDoc = await PDFLib.PDFDocument.load(fileBuffer);
+      const totalPages = srcDoc.getPageCount();
+      const selectedPages = parsePageNumbers(inputStr, totalPages);
+
+      if (selectedPages.length === 0) {
+        alert("সঠিক পেজ নম্বর পাওয়া যায়নি!");
+        return null;
+      }
+
+      const newDoc = await PDFLib.PDFDocument.create();
+      const pageIndices = selectedPages.map(p => p - 1);
+      const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
+
+      copiedPages.forEach(p => newDoc.addPage(p));
+      const pdfBytes = await newDoc.save();
+      return { pdfBytes, count: selectedPages.length };
+    }
+
+    // ফ্রেশ PDF ডাউনলোড ফাংশন
+    async function generateFilteredPDF() {
+      try {
+        const result = await buildExtractedPDFBytes();
+        if (!result) return;
+
+        const blob = new Blob([result.pdfBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Filtered_Labels_${result.count}_Pages.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        document.getElementById('extractorModal').style.display = 'none';
+        alert(`✅ মোট ${result.count} টি পেজ দিয়ে নতুন ফ্রেশ PDF ডাউনলোড হয়েছে!`);
+      } catch (err) {
+        alert("PDF তৈরি করতে সমস্যা হয়েছে: " + err.message);
+      }
+    }
+
+    // সরাসরি প্রিন্ট ফাংশন (Print Dialog)
+    async function directPrintPDF() {
+      try {
+        const result = await buildExtractedPDFBytes();
+        if (!result) return;
+
+        const blob = new Blob([result.pdfBytes], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+
+        const printFrame = document.getElementById('printFrame');
+        printFrame.src = blobUrl;
+        printFrame.onload = function() {
+          try {
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+          } catch(e) {
+            window.open(blobUrl, '_blank');
+          }
+        };
+
+        document.getElementById('extractorModal').style.display = 'none';
+      } catch (err) {
+        alert("সরাসরি প্রিন্ট করা যায়নি: " + err.message);
+      }
+    }
+
     function openExportModal() {
       if (extractedData.length === 0) return alert("শেয়ার করার মতো ডেটা নেই!");
       document.getElementById('exportModal').style.display = 'flex';
@@ -946,12 +1140,13 @@
 
       if (list.length === 0) return alert("এই ক্যাটাগরিতে কোনো অর্ডার নেই!");
 
-      let csv = "\uFEFFআপলোড সময়,লেবেল তারিখ,প্ল্যাটফর্ম,কুরিয়ার পার্টনার,অর্ডার আইডি,ট্র্যাকিং আইডি,স্ট্যাটাস,ডুপ্লিকেট\n";
+      let csv = "\uFEFFআপলোড সময়,লেবেল তারিখ,PDF পেজ নং,প্ল্যাটফর্ম,কুরিয়ার পার্টনার,অর্ডার আইডি,ট্র্যাকিং আইডি,স্ট্যাটাস,ডুপ্লিকেট\n";
       list.forEach(row => {
         let upTime = row.uploadTime || row.date || '';
         let lblDate = row.labelDate || row.date || '';
+        let pgNo = row.pageNumber || '-';
         let isDup = row.isDuplicate ? "DUPLICATE" : "NO";
-        csv += `"${upTime}","${lblDate}","${row.platform}","${row.courier}","${row.orderId}","${row.trackingId}","${row.status}","${isDup}"\n`;
+        csv += `"${upTime}","${lblDate}","${pgNo}","${row.platform}","${row.courier}","${row.orderId}","${row.trackingId}","${row.status}","${isDup}"\n`;
       });
 
       const fileName = `${titlePrefix}_${new Date().toISOString().slice(0,10)}.csv`;
