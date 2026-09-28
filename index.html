@@ -200,7 +200,7 @@
       </div>
     </div>
 
-    <!-- টেবিল এরিয়া (SKU কলাম ছাড়া পরিচ্ছন্ন রূপ) -->
+    <!-- টেবিল এরিয়া -->
     <div class="results" id="resultsBox" style="display:none;">
       <table>
         <thead>
@@ -249,11 +249,17 @@
   <div class="modal-overlay" id="extractorModal">
     <div class="modal-box">
       <h3 style="color:#8b5cf6; font-size:14px; margin-bottom:6px;">📑 স্মার্ট লেবেল এক্সট্রাক্টর ও প্রিন্টার</h3>
-      <p style="font-size:11px; color:#94a3b8; margin-bottom:10px;">প্রিন্টারের মতো পেজ বেছে নিন (লেবেলের উপরে স্বয়ংক্রিয় SKU প্রিন্ট হবে):</p>
+      <p style="font-size:11px; color:#94a3b8; margin-bottom:10px;">প্রিন্টারের মতো পেজ বেছে নিন (লেবেলে স্বয়ংক্রিয় SKU সহ):</p>
 
       <div style="margin-bottom:8px;">
         <label style="font-size:11px; color:#38bdf8; font-weight:bold;">PDF ফাইল নির্বাচন করুন:</label>
         <select id="extractorFileSelect" class="filter-input" style="width:100%; margin-top:4px;" onchange="updateSuggestedPages()"></select>
+      </div>
+
+      <!-- পরবর্তীতে ফাইল লিঙ্ক হারিয়ে গেলে রি-সিলেক্ট বক্স -->
+      <div id="fileReloadBox" style="display:none; background:rgba(245, 158, 11, 0.15); border:1px dashed #f59e0b; padding:8px; border-radius:6px; margin-bottom:10px;">
+        <p style="font-size:11px; color:#fbbf24; margin-bottom:4px;">⚠️ ফাইলটি রিলোড করতে নিচের বোতামে চাপ দিয়ে মূল PDF বেছে নিন:</p>
+        <input type="file" id="reselectPdfInput" accept="application/pdf" style="display:block; font-size:11px; color:#fff;" onchange="loadPDFBufferDirectly(this)">
       </div>
 
       <div style="margin-bottom:10px;">
@@ -339,7 +345,6 @@
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
     const meeshoOrderRegex   = /\b\d{16,20}_\d+\b/;
 
-    // লেবেল থেকে SKU চেনার লজিক (যা প্রিন্ট ফাইলে ওভারলে হবে)
     function extractSkuId(text, platform) {
       if (!text) return "";
       let match = text.match(/(?:SKU\s*(?:ID|Code|No)?[:\s#-]+)([A-Za-z0-9_\-\.\/]+)/i);
@@ -932,6 +937,7 @@
       }
     }
 
+    // আপডেটেড UI ফাংশন: extractorBtn এখন ডেটা থাকলেই সবসময় দৃশ্যমান থাকবে
     function updateUI(addedCount = null) {
       const hasData = extractedData.length > 0;
       document.getElementById('dashboardCards').style.display = hasData ? 'grid' : 'none';
@@ -939,7 +945,10 @@
       document.getElementById('filterWrapper').style.display = hasData ? 'block' : 'none';
       document.getElementById('resultsBox').style.display = hasData ? 'block' : 'none';
       document.getElementById('saveBtn').style.display = hasData ? 'inline-block' : 'none';
-      document.getElementById('extractorBtn').style.display = Object.keys(loadedFilesMap).length > 0 ? 'inline-block' : 'none';
+      
+      // গুরুত্বপূর্ণ ফিক্স: ডেটাবেসে ডেটা থাকলে এক্সট্রাক্টর বাটন সবসময় থাকবে!
+      document.getElementById('extractorBtn').style.display = hasData ? 'inline-block' : 'none';
+      
       document.getElementById('exportBtn').style.display = hasData ? 'inline-block' : 'none';
       document.getElementById('removeDupBtn').style.display = hasData ? 'inline-block' : 'none';
       document.getElementById('clearBtn').style.display = hasData ? 'inline-block' : 'none';
@@ -991,16 +1000,21 @@
       applyFilters();
     }
 
+    // স্মার্ট এক্সট্রাক্টর মডাল ওপেনিং
     function openSmartExtractorModal() {
-      const fileNames = Object.keys(loadedFilesMap);
-      if (fileNames.length === 0) {
-        alert("কোনো PDF ফাইল মেমরিতে নেই! অনুগ্রহ করে শিপিং লেবেল আপলোড করুন।");
+      // ডেটাবেসে থাকা সমস্ত ইউনিক ফাইলের নাম সংগ্রহ করা
+      const dbFileNames = Array.from(new Set(
+        extractedData.map(i => i.fileName).filter(n => n && n !== "-")
+      ));
+
+      if (dbFileNames.length === 0) {
+        alert("কোনো PDF ফাইল রেকর্ড পাওয়া যায়নি! নতুন শিপিং লেবেল যোগ করুন।");
         return;
       }
 
       const select = document.getElementById('extractorFileSelect');
       select.innerHTML = '';
-      fileNames.forEach(name => {
+      dbFileNames.forEach(name => {
         const opt = document.createElement('option');
         opt.value = name;
         opt.innerText = name;
@@ -1013,6 +1027,30 @@
 
     function updateSuggestedPages() {
       selectOnlyUniquePages();
+      checkIfFileInBuffer();
+    }
+
+    // চেক করা যে ফাইলটি কি মেমরিতে আছে নাকি রি-সিলেক্ট করতে হবে
+    function checkIfFileInBuffer() {
+      const selectedFile = document.getElementById('extractorFileSelect').value;
+      const reloadBox = document.getElementById('fileReloadBox');
+      if (selectedFile && !loadedFilesMap[selectedFile]) {
+        reloadBox.style.display = 'block';
+      } else {
+        reloadBox.style.display = 'none';
+      }
+    }
+
+    async function loadPDFBufferDirectly(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const arrayBuffer = await file.arrayBuffer();
+      // নির্বাচিত ফাইলের নামেই বাফার সংরক্ষণ
+      const currentSelectedName = document.getElementById('extractorFileSelect').value;
+      loadedFilesMap[currentSelectedName] = arrayBuffer;
+      loadedFilesMap[file.name] = arrayBuffer;
+      document.getElementById('fileReloadBox').style.display = 'none';
+      alert(`✅ '${file.name}' সফলভাবে লোড হয়েছে! এবার ডাউনলোড বা প্রিন্ট করুন।`);
     }
 
     function selectOnlyUniquePages() {
@@ -1061,7 +1099,6 @@
       return Array.from(pages).sort((a,b) => a - b);
     }
 
-    // মূল লেবেল পেজের উপরে স্বয়ংক্রিয়ভাবে SKU লিখে দেওয়া
     async function buildExtractedPDFBytes() {
       const selectedFileName = document.getElementById('extractorFileSelect').value;
       const inputStr = document.getElementById('pageNumberInput').value.trim();
@@ -1071,9 +1108,10 @@
         return null;
       }
 
-      const fileBuffer = loadedFilesMap[selectedFileName];
+      let fileBuffer = loadedFilesMap[selectedFileName];
       if (!fileBuffer) {
-        alert("ফাইলটি মেমরিতে পাওয়া যায়নি!");
+        document.getElementById('fileReloadBox').style.display = 'block';
+        alert("⚠️ ফাইলটি মেমরিতে পাওয়া যায়নি। অনুগ্রহ করে নিচে 'মূল PDF বেছে নিন' বক্সে ফাইলটি একবার দেখিয়ে দিন।");
         return null;
       }
 
@@ -1090,18 +1128,15 @@
       const pageIndices = selectedPages.map(p => p - 1);
       const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
 
-      // নির্বাচিত প্রতিটি পেজের উপর SKU স্ট্যাম্প বসানো
       for (let idx = 0; idx < copiedPages.length; idx++) {
         const page = copiedPages[idx];
         const pageNum = selectedPages[idx];
 
-        // এই পেজের SKU আইডি খুঁজে বের করা
         const record = extractedData.find(item => item.fileName === selectedFileName && item.pageNumber === pageNum);
         const skuText = record && record.skuId ? record.skuId.trim() : "";
 
         if (skuText) {
           const { width, height } = page.getSize();
-          // লেবেলের ওপরের অংশে স্পষ্ট বড় হরফে SKU প্রিন্ট করা
           page.drawRectangle({
             x: 10,
             y: height - 28,
