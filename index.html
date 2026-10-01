@@ -11,7 +11,7 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 15px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-    .container { width: 100%; max-width: 1150px; background: #1e293b; border-radius: 12px; padding: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    .container { width: 100%; max-width: 1200px; background: #1e293b; border-radius: 12px; padding: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
     h1 { font-size: 19px; color: #38bdf8; text-align: center; margin-bottom: 4px; }
     p.subtitle { font-size: 12px; color: #94a3b8; text-align: center; margin-bottom: 15px; }
 
@@ -87,6 +87,27 @@
     .btn-del-row { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 13px; }
     .track-link { color: #38bdf8; text-decoration: underline; font-weight: bold; }
     .page-pill { background: #334155; color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+    .file-pill { background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 5px; border-radius: 4px; font-size: 10px; max-width: 130px; display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; border: 1px solid rgba(56, 189, 248, 0.3); }
+
+    /* মিশো স্টাইল ক্যামেরা স্ক্যানার অ্যানিমেশন ও স্টাইল */
+    .scanner-container { position: relative; width: 100%; max-height: 250px; border-radius: 8px; overflow: hidden; }
+    .scanner-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; transition: all 0.3s ease;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0); z-index: 20;
+    }
+    .scanner-overlay.success-flash {
+      background: rgba(16, 185, 129, 0.45);
+      border: 4px solid #10b981;
+    }
+    .scanner-overlay.blackout {
+      background: rgba(0, 0, 0, 0.92);
+    }
+    .scan-tick-icon {
+      display: none; font-size: 48px; color: #ffffff;
+      text-shadow: 0 0 12px rgba(16, 185, 129, 0.9);
+    }
 
     /* মডাল */
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; align-items: center; justify-content: center; padding: 20px; }
@@ -186,7 +207,7 @@
     <!-- ফিল্টার ও ডেট রেঞ্জ -->
     <div class="filter-wrapper" id="filterWrapper">
       <div class="filter-row">
-        <input type="text" id="searchInput" class="filter-input" style="flex:2; min-width:180px;" placeholder="🔍 যে কোনো ID লিখে খুঁজুন..." oninput="applyFilters()">
+        <input type="text" id="searchInput" class="filter-input" style="flex:2; min-width:180px;" placeholder="🔍 যে কোনো ID বা ফাইল লিখে খুঁজুন..." oninput="applyFilters()">
         
         <div style="display:flex; align-items:center; gap:4px;">
           <span class="date-label">আপলোড From:</span>
@@ -200,13 +221,14 @@
       </div>
     </div>
 
-    <!-- টেবিল এরিয়া -->
+    <!-- টেবিল এরিয়া (ফাইলের নাম কলাম সহ) -->
     <div class="results" id="resultsBox" style="display:none;">
       <table>
         <thead>
           <tr>
             <th>#</th>
             <th>স্ট্যাটাস</th>
+            <th>ফাইলের নাম</th>
             <th>PDF পেজ নং</th>
             <th>আপলোড সময়</th>
             <th>লেবেল তারিখ</th>
@@ -222,12 +244,19 @@
     </div>
   </div>
 
-  <!-- কন্টিনিউয়াস স্ক্যানার মডাল -->
+  <!-- মিশো স্টাইল কন্টিনিউয়াস স্ক্যানার মডাল -->
   <div class="modal-overlay" id="scanner-modal">
     <div class="modal-box" style="text-align:center;">
       <h3 id="scanner-title" style="color:#38bdf8; font-size:14px; margin-bottom:6px;">📷 কন্টিনিউয়াস বারকোড স্ক্যানার</h3>
-      <p style="font-size:11px; color:#94a3b8; margin-bottom:8px;">একটার পর একটা পার্সেল সামনে ধরুন (স্বয়ংক্রিয় বিপ হবে)</p>
-      <div id="scanner-preview" style="width:100%; max-height:240px; border-radius:8px; overflow:hidden;"></div>
+      <p style="font-size:11px; color:#94a3b8; margin-bottom:8px;">একটার পর একটা পার্সেল সামনে ধরুন</p>
+      
+      <div class="scanner-container">
+        <div id="scanner-preview" style="width:100%;"></div>
+        <div id="scanner-overlay" class="scanner-overlay">
+          <div id="scan-tick" class="scan-tick-icon">✓</div>
+        </div>
+      </div>
+
       <div id="scanner-last-code" style="margin-top:8px; font-size:12px; color:#34d399; font-weight:bold; min-height:18px;"></div>
       <button style="margin-top:10px; width:100%; background:#ef4444; color:#fff; border:none; padding:9px; border-radius:6px; font-weight:bold; cursor:pointer;" onclick="stopContinuousScanner()">✕ স্ক্যান শেষ / বন্ধ করুন</button>
     </div>
@@ -249,17 +278,11 @@
   <div class="modal-overlay" id="extractorModal">
     <div class="modal-box">
       <h3 style="color:#8b5cf6; font-size:14px; margin-bottom:6px;">📑 স্মার্ট লেবেল এক্সট্রাক্টর ও প্রিন্টার</h3>
-      <p style="font-size:11px; color:#94a3b8; margin-bottom:10px;">প্রিন্টারের মতো পেজ বেছে নিন (লেবেলে স্বয়ংক্রিয় SKU সহ):</p>
+      <p style="font-size:11px; color:#94a3b8; margin-bottom:10px;">প্রিন্টারের মতো পেজ বেছে ফ্রেশ PDF তৈরি বা সরাসরি প্রিন্ট করুন:</p>
 
       <div style="margin-bottom:8px;">
         <label style="font-size:11px; color:#38bdf8; font-weight:bold;">PDF ফাইল নির্বাচন করুন:</label>
         <select id="extractorFileSelect" class="filter-input" style="width:100%; margin-top:4px;" onchange="updateSuggestedPages()"></select>
-      </div>
-
-      <!-- পরবর্তীতে ফাইল লিঙ্ক হারিয়ে গেলে রি-সিলেক্ট বক্স -->
-      <div id="fileReloadBox" style="display:none; background:rgba(245, 158, 11, 0.15); border:1px dashed #f59e0b; padding:8px; border-radius:6px; margin-bottom:10px;">
-        <p style="font-size:11px; color:#fbbf24; margin-bottom:4px;">⚠️ ফাইলটি রিলোড করতে নিচের বোতামে চাপ দিয়ে মূল PDF বেছে নিন:</p>
-        <input type="file" id="reselectPdfInput" accept="application/pdf" style="display:block; font-size:11px; color:#fff;" onchange="loadPDFBufferDirectly(this)">
       </div>
 
       <div style="margin-bottom:10px;">
@@ -272,8 +295,8 @@
         <button style="flex:1; background:#334155; color:#fff; border:none; padding:7px; border-radius:4px; font-size:11px; cursor:pointer;" onclick="selectAllPages()">📑 সব পেজ নিন</button>
       </div>
 
-      <button class="modal-opt-btn" style="background:#3b82f6; color:#fff; justify-content:center;" onclick="directPrintPDF()">🖨️ সরাসরি প্রিন্ট করুন (লেবেলে SKU সহ)</button>
-      <button class="modal-opt-btn" style="background:#10b981; color:#fff; justify-content:center;" onclick="generateFilteredPDF()">💾 ফ্রেশ PDF ডাউনলোড করুন (লেবেলে SKU সহ)</button>
+      <button class="modal-opt-btn" style="background:#3b82f6; color:#fff; justify-content:center;" onclick="directPrintPDF()">🖨️ সরাসরি প্রিন্ট করুন (Print Dialog)</button>
+      <button class="modal-opt-btn" style="background:#10b981; color:#fff; justify-content:center;" onclick="generateFilteredPDF()">💾 ফ্রেশ PDF ডাউনলোড করুন</button>
       <button class="modal-opt-btn" style="background:#334155; color:#fff; text-align:center; justify-content:center;" onclick="document.getElementById('extractorModal').style.display='none'">বন্ধ করুন</button>
     </div>
   </div>
@@ -303,6 +326,7 @@
     let html5QrScanner = null;
     let currentScanMode = 'return';
     let targetRowIndex = -1;
+    let isScanCoolingDown = false;
 
     let currentPlatformFilter = 'ALL';
     let currentStatusFilter = 'ALL';
@@ -344,29 +368,6 @@
     const flipkartOrderRegex = /\bOD\d{16,20}\b/i;
     const amazonOrderRegex   = /\b\d{3}-\d{7}-\d{7}\b/;
     const meeshoOrderRegex   = /\b\d{16,20}_\d+\b/;
-
-    function extractSkuId(text, platform) {
-      if (!text) return "";
-      let match = text.match(/(?:SKU\s*(?:ID|Code|No)?[:\s#-]+)([A-Za-z0-9_\-\.\/]+)/i);
-      if (match && match[1]) {
-        let val = match[1].trim();
-        if (val.length > 2 && val.toUpperCase() !== "ID" && val.toUpperCase() !== "NO") return val;
-      }
-      if (platform === "Meesho") {
-        let mMatch = text.match(/(?:Product\s*(?:Name|Title)?[:\s\n]*)([A-Za-z0-9_\-\.\/]+)/i) ||
-                     text.match(/\b([A-Za-z0-9_-]{4,25})\s*\|\s*(?:Size|Color|Qty)\b/i);
-        if (mMatch && mMatch[1]) return mMatch[1].trim();
-      }
-      if (platform === "Flipkart") {
-        let fkMatch = text.match(/\bFSN[:\s#-]*([A-Za-z0-9]+)\b/i);
-        if (fkMatch && fkMatch[1]) return fkMatch[1].trim();
-      }
-      if (platform === "Amazon") {
-        let amzSku = text.match(/(?:FNSKU|MSKU)[:\s#-]*([A-Za-z0-9_\-]+)/i);
-        if (amzSku && amzSku[1]) return amzSku[1].trim();
-      }
-      return "";
-    }
 
     function extractDate(text) {
       const dMatch = text.match(/\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4})\b/);
@@ -511,7 +512,6 @@
               if ((trackingId === "নেই" || platform === "Amazon") && pendingAmazonAWB) trackingId = pendingAmazonAWB;
               let courier = detectCourier(pageText, trackingId, platform);
               let labelDate = extractDate(pageText);
-              let skuId = extractSkuId(pageText, platform);
               let live = getLiveTimestamp();
 
               extractedData.push({
@@ -521,7 +521,6 @@
                 platform: platform,
                 courier: courier,
                 orderId: orderId,
-                skuId: skuId,
                 trackingId: trackingId,
                 status: "Unique",
                 fileName: file.name,
@@ -609,7 +608,6 @@
           platform: pForm,
           courier: cName,
           orderId: isOrder ? key : "ম্যানুয়াল এন্ট্রি",
-          skuId: "",
           trackingId: isOrder ? "নেই" : key,
           status: newStatus,
           fileName: "-",
@@ -624,6 +622,7 @@
       input.value = '';
     }
 
+    // মিশো স্টাইল কন্টিনিউয়াস স্ক্যানার লজিক
     let lastScannedText = "";
     let lastScanTime = 0;
 
@@ -641,17 +640,28 @@
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 140 } },
         (decodedText) => {
+          if (isScanCoolingDown) return;
+
           const now = Date.now();
           const cleanCode = decodedText.trim();
           if (cleanCode === lastScannedText && (now - lastScanTime < 1800)) return;
 
           lastScannedText = cleanCode;
           lastScanTime = now;
+          isScanCoolingDown = true;
+
+          // ১. সাউন্ড ও ভাইব্রেশন
           playBeepSound();
           if (navigator.vibrate) navigator.vibrate(80);
 
-          let live = getLiveTimestamp();
+          // ২. মিশো স্টাইল গ্রিন ফ্ল্যাশ ও চেক অ্যানিমেশন
+          const overlay = document.getElementById('scanner-overlay');
+          const tick = document.getElementById('scan-tick');
+          overlay.className = "scanner-overlay success-flash";
+          tick.style.display = "block";
 
+          // ৩. ডেটা সেভ
+          let live = getLiveTimestamp();
           if (currentScanMode === 'dispatch') {
             let exists = extractedData.find(i => i.trackingId.toLowerCase() === cleanCode.toLowerCase());
             if (!exists) {
@@ -662,7 +672,6 @@
                 platform: "বারকোড ডিসপ্যাচ",
                 courier: detectCourier("", cleanCode, "অন্যান্য"),
                 orderId: "স্ক্যান ডিসপ্যাচ",
-                skuId: "",
                 trackingId: cleanCode,
                 status: "Unique",
                 fileName: "-",
@@ -690,7 +699,6 @@
                 platform: "অন্যান্য",
                 courier: detectCourier("", cleanCode, "অন্যান্য"),
                 orderId: "স্ক্যান রিটার্ন",
-                skuId: "",
                 trackingId: cleanCode,
                 status: "Returned",
                 fileName: "-",
@@ -703,6 +711,17 @@
           refreshDuplicates();
           autoSaveAndSync();
           updateUI();
+
+          // ৪. মিশো স্টাইল ক্ষণিকের অন্ধকার (Blackout) এবং পরবর্তী পার্সেলের জন্য রেডি হওয়া
+          setTimeout(() => {
+            overlay.className = "scanner-overlay blackout";
+            tick.style.display = "none";
+          }, 350);
+
+          setTimeout(() => {
+            overlay.className = "scanner-overlay";
+            isScanCoolingDown = false;
+          }, 850);
         },
         () => {}
       ).catch(() => {
@@ -882,7 +901,9 @@
       });
 
       displayList.forEach((item) => {
-        if (query && !item.orderId.toLowerCase().includes(query) && !item.trackingId.toLowerCase().includes(query)) return;
+        if (query && !item.orderId.toLowerCase().includes(query) && 
+            !item.trackingId.toLowerCase().includes(query) && 
+            !(item.fileName && item.fileName.toLowerCase().includes(query))) return;
         
         if (currentStatusFilter === 'Duplicate' && !item.isDuplicate) return;
         if (currentStatusFilter !== 'ALL' && currentStatusFilter !== 'Duplicate' && item.status !== currentStatusFilter) return;
@@ -916,10 +937,12 @@
         if (trackUrl) trackingHtml = `<a class="track-link" href="${trackUrl}" target="_blank">${item.trackingId} 🔗</a>`;
 
         let pageHtml = item.pageNumber ? `<span class="page-pill">Pg ${item.pageNumber}</span>` : '-';
+        let fileHtml = (item.fileName && item.fileName !== "-") ? `<span class="file-pill" title="${item.fileName}">${item.fileName}</span>` : `<span style="color:#64748b;">-</span>`;
 
         tr.innerHTML = `
           <td>${visible}</td>
           <td>${badgeHtml}</td>
+          <td>${fileHtml}</td>
           <td>${pageHtml}</td>
           <td style="color:#38bdf8; font-weight:bold;">${item.uploadTime || item.date || '-'}</td>
           <td style="color:#94a3b8;">${item.labelDate || item.date || '-'}</td>
@@ -933,11 +956,10 @@
       });
 
       if (visible === 0 && extractedData.length > 0) {
-        tableBody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:#94a3b8; padding:20px;">এই ফিল্টারে কোনো রেকর্ড পাওয়া যায়নি!</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="11" style="text-align:center; color:#94a3b8; padding:20px;">এই ফিল্টারে কোনো রেকর্ড পাওয়া যায়নি!</td></tr>`;
       }
     }
 
-    // আপডেটেড UI ফাংশন: extractorBtn এখন ডেটা থাকলেই সবসময় দৃশ্যমান থাকবে
     function updateUI(addedCount = null) {
       const hasData = extractedData.length > 0;
       document.getElementById('dashboardCards').style.display = hasData ? 'grid' : 'none';
@@ -945,10 +967,7 @@
       document.getElementById('filterWrapper').style.display = hasData ? 'block' : 'none';
       document.getElementById('resultsBox').style.display = hasData ? 'block' : 'none';
       document.getElementById('saveBtn').style.display = hasData ? 'inline-block' : 'none';
-      
-      // গুরুত্বপূর্ণ ফিক্স: ডেটাবেসে ডেটা থাকলে এক্সট্রাক্টর বাটন সবসময় থাকবে!
       document.getElementById('extractorBtn').style.display = hasData ? 'inline-block' : 'none';
-      
       document.getElementById('exportBtn').style.display = hasData ? 'inline-block' : 'none';
       document.getElementById('removeDupBtn').style.display = hasData ? 'inline-block' : 'none';
       document.getElementById('clearBtn').style.display = hasData ? 'inline-block' : 'none';
@@ -1000,9 +1019,7 @@
       applyFilters();
     }
 
-    // স্মার্ট এক্সট্রাক্টর মডাল ওপেনিং
     function openSmartExtractorModal() {
-      // ডেটাবেসে থাকা সমস্ত ইউনিক ফাইলের নাম সংগ্রহ করা
       const dbFileNames = Array.from(new Set(
         extractedData.map(i => i.fileName).filter(n => n && n !== "-")
       ));
@@ -1027,30 +1044,6 @@
 
     function updateSuggestedPages() {
       selectOnlyUniquePages();
-      checkIfFileInBuffer();
-    }
-
-    // চেক করা যে ফাইলটি কি মেমরিতে আছে নাকি রি-সিলেক্ট করতে হবে
-    function checkIfFileInBuffer() {
-      const selectedFile = document.getElementById('extractorFileSelect').value;
-      const reloadBox = document.getElementById('fileReloadBox');
-      if (selectedFile && !loadedFilesMap[selectedFile]) {
-        reloadBox.style.display = 'block';
-      } else {
-        reloadBox.style.display = 'none';
-      }
-    }
-
-    async function loadPDFBufferDirectly(input) {
-      const file = input.files[0];
-      if (!file) return;
-      const arrayBuffer = await file.arrayBuffer();
-      // নির্বাচিত ফাইলের নামেই বাফার সংরক্ষণ
-      const currentSelectedName = document.getElementById('extractorFileSelect').value;
-      loadedFilesMap[currentSelectedName] = arrayBuffer;
-      loadedFilesMap[file.name] = arrayBuffer;
-      document.getElementById('fileReloadBox').style.display = 'none';
-      alert(`✅ '${file.name}' সফলভাবে লোড হয়েছে! এবার ডাউনলোড বা প্রিন্ট করুন।`);
     }
 
     function selectOnlyUniquePages() {
@@ -1110,8 +1103,7 @@
 
       let fileBuffer = loadedFilesMap[selectedFileName];
       if (!fileBuffer) {
-        document.getElementById('fileReloadBox').style.display = 'block';
-        alert("⚠️ ফাইলটি মেমরিতে পাওয়া যায়নি। অনুগ্রহ করে নিচে 'মূল PDF বেছে নিন' বক্সে ফাইলটি একবার দেখিয়ে দিন।");
+        alert("ফাইলটি মেমরিতে পাওয়া যায়নি! অনুগ্রহ করে শিপিং লেবেল আবার সিলেক্ট করুন।");
         return null;
       }
 
@@ -1128,36 +1120,7 @@
       const pageIndices = selectedPages.map(p => p - 1);
       const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
 
-      for (let idx = 0; idx < copiedPages.length; idx++) {
-        const page = copiedPages[idx];
-        const pageNum = selectedPages[idx];
-
-        const record = extractedData.find(item => item.fileName === selectedFileName && item.pageNumber === pageNum);
-        const skuText = record && record.skuId ? record.skuId.trim() : "";
-
-        if (skuText) {
-          const { width, height } = page.getSize();
-          page.drawRectangle({
-            x: 10,
-            y: height - 28,
-            width: Math.min(width - 20, 240),
-            height: 22,
-            color: PDFLib.rgb(1, 1, 1),
-            borderColor: PDFLib.rgb(0, 0, 0),
-            borderWidth: 1.5
-          });
-
-          page.drawText(`SKU: ${skuText}`, {
-            x: 15,
-            y: height - 23,
-            size: 13,
-            color: PDFLib.rgb(0, 0, 0)
-          });
-        }
-
-        newDoc.addPage(page);
-      }
-
+      copiedPages.forEach(p => newDoc.addPage(p));
       const pdfBytes = await newDoc.save();
       return { pdfBytes, count: selectedPages.length };
     }
@@ -1172,14 +1135,14 @@
 
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Filtered_Labels_With_SKU_${result.count}_Pages.pdf`;
+        a.download = `Filtered_Labels_${result.count}_Pages.pdf`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
         document.getElementById('extractorModal').style.display = 'none';
-        alert(`✅ মোট ${result.count} টি পেজ (SKU স্ট্যাম্প সহ) দিয়ে ফ্রেশ PDF ডাউনলোড হয়েছে!`);
+        alert(`✅ মোট ${result.count} টি পেজ দিয়ে ফ্রেশ PDF ডাউনলোড হয়েছে!`);
       } catch (err) {
         alert("PDF তৈরি করতে সমস্যা হয়েছে: " + err.message);
       }
@@ -1230,13 +1193,14 @@
 
       if (list.length === 0) return alert("এই ক্যাটাগরিতে কোনো অর্ডার নেই!");
 
-      let csv = "\uFEFFআপলোড সময়,লেবেল তারিখ,PDF পেজ নং,প্ল্যাটফর্ম,কুরিয়ার পার্টনার,অর্ডার আইডি,ট্র্যাকিং আইডি,স্ট্যাটাস,ডুপ্লিকেট\n";
+      let csv = "\uFEFFআপলোড সময়,লেবেল তারিখ,ফাইলের নাম,PDF পেজ নং,প্ল্যাটফর্ম,কুরিয়ার পার্টনার,অর্ডার আইডি,ট্র্যাকিং আইডি,স্ট্যাটাস,ডুপ্লিকেট\n";
       list.forEach(row => {
         let upTime = row.uploadTime || row.date || '';
         let lblDate = row.labelDate || row.date || '';
+        let fName = row.fileName || '-';
         let pgNo = row.pageNumber || '-';
         let isDup = row.isDuplicate ? "DUPLICATE" : "NO";
-        csv += `"${upTime}","${lblDate}","${pgNo}","${row.platform}","${row.courier}","${row.orderId}","${row.trackingId}","${row.status}"\n`;
+        csv += `"${upTime}","${lblDate}","${fName}","${pgNo}","${row.platform}","${row.courier}","${row.orderId}","${row.trackingId}","${row.status}"\n`;
       });
 
       const fileName = `${titlePrefix}_${new Date().toISOString().slice(0,10)}.csv`;
