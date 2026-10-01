@@ -64,6 +64,12 @@
     .filter-input:focus { border-color: #38bdf8; }
     .date-label { font-size: 11px; color: #94a3b8; font-weight: bold; }
 
+    /* সার্চ বক্সের সাথে ক্যামেরা বাটন */
+    .search-input-wrapper { display: flex; align-items: center; flex: 2; min-width: 200px; background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding-right: 4px; }
+    .search-input-wrapper input { flex: 1; border: none; outline: none; background: transparent; padding: 7px 10px; color: white; font-size: 12px; }
+    .btn-search-cam { background: #0284c7; color: white; border: none; padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+    .btn-search-cam:hover { background: #0369a1; }
+
     .results { max-height: 480px; overflow-y: auto; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
     table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; }
     th, td { padding: 8px 6px; border-bottom: 1px solid #334155; }
@@ -85,7 +91,6 @@
     .page-pill { background: #334155; color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
     .file-pill { background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 5px; border-radius: 4px; font-size: 10px; max-width: 130px; display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; border: 1px solid rgba(56, 189, 248, 0.3); }
 
-    /* ভিডিওর মতো ফুল-স্ক্রিন গ্রিন ও নোটিফিকেশন ডিজাইন */
     .scanner-container { position: relative; width: 100%; min-height: 270px; border-radius: 8px; overflow: hidden; background: #000; }
     .scanner-overlay {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -93,20 +98,14 @@
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       background: rgba(0, 0, 0, 0); z-index: 20;
     }
-    .scanner-overlay.success-green {
-      background: #2e7d32 !important;
-    }
-    .scanner-overlay.blackout {
-      background: #000000 !important;
-    }
+    .scanner-overlay.success-green { background: #2e7d32 !important; }
+    .scanner-overlay.blackout { background: #000000 !important; }
     .circle-tick {
       display: none; width: 72px; height: 72px; background: rgba(255, 255, 255, 0.95);
       border-radius: 50%; align-items: center; justify-content: center;
       box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }
-    .circle-tick svg {
-      width: 44px; height: 44px; fill: #2e7d32;
-    }
+    .circle-tick svg { width: 44px; height: 44px; fill: #2e7d32; }
     .scan-toast {
       display: none; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
       background: #ffffff; color: #1e293b; padding: 10px 14px; border-radius: 8px;
@@ -149,7 +148,7 @@
         <div class="metric-sub" id="subMsh" style="color:#f87171;">রিটার্ন: 0</div>
       </div>
       <div class="metric-card" onclick="setDashboardFilter('Duplicate', 'status')">
-        <div class="metric-title">⚠️ ডুপ্লিকেট পেয়ার</div>
+        <div class="metric-title">⚠️️ ডুপ্লিকেট পেয়ার</div>
         <div class="metric-value" id="cardDup" style="color:#f43f5e;">0</div>
         <div class="metric-sub" style="color:#fda4af;">একসাথে দেখতে চাপুন</div>
       </div>
@@ -208,9 +207,14 @@
       <button class="action-btn btn-clear" id="clearBtn" onclick="clearData()" title="সব মুছুন">🗑️</button>
     </div>
 
+    <!-- ফিল্টার ও ডেট রেঞ্জ (ক্যামেরা সার্চ যুক্ত) -->
     <div class="filter-wrapper" id="filterWrapper">
       <div class="filter-row">
-        <input type="text" id="searchInput" class="filter-input" style="flex:2; min-width:180px;" placeholder="🔍 যে কোনো ID বা ফাইল লিখে খুঁজুন..." oninput="applyFilters()">
+        
+        <div class="search-input-wrapper">
+          <input type="text" id="searchInput" placeholder="🔍 যে কোনো ID বা ফাইল লিখে খুঁজুন..." oninput="applyFilters()">
+          <button class="btn-search-cam" onclick="openSearchScanner()" title="বারকোড/QR স্ক্যান করে খুঁজুন">📷 স্ক্যান</button>
+        </div>
         
         <div style="display:flex; align-items:center; gap:4px;">
           <span class="date-label">আপলোড From:</span>
@@ -246,15 +250,15 @@
     </div>
   </div>
 
-  <!-- ভিডিও স্টাইলের স্ক্যানার মডাল -->
+  <!-- কন্টিনিউয়াস স্ক্যানার মডাল -->
   <div class="modal-overlay" id="scanner-modal">
     <div class="modal-box" style="text-align:center;">
       <div id="scanToast" class="scan-toast">
-        <span style="color:#2e7d32; font-size:14px; margin-right:4px;">✓</span> Scanned Details saved successfully. Scan Next Order[span_0](start_span)[span_0](end_span)
+        <span style="color:#2e7d32; font-size:14px; margin-right:4px;">✓</span> Scanned Details saved successfully. Scan Next Order
       </div>
 
       <h3 id="scanner-title" style="color:#38bdf8; font-size:14px; margin-bottom:6px;">📷 কন্টিনিউয়াস বারকোড স্ক্যানার</h3>
-      <p style="font-size:11px; color:#94a3b8; margin-bottom:8px;">একটার পর একটা পার্সেল সামনে ধরুন[span_1](start_span)[span_1](end_span)</p>
+      <p style="font-size:11px; color:#94a3b8; margin-bottom:8px;">একটার পর একটা পার্সেল সামনে ধরুন</p>
       
       <div class="scanner-container">
         <div id="scanner-preview" style="width:100%;"></div>
@@ -267,6 +271,16 @@
 
       <div id="scanner-last-code" style="margin-top:8px; font-size:12px; color:#34d399; font-weight:bold; min-height:18px;"></div>
       <button style="margin-top:10px; width:100%; background:#ef4444; color:#fff; border:none; padding:9px; border-radius:6px; font-weight:bold; cursor:pointer;" onclick="stopContinuousScanner()">✕ স্ক্যান শেষ / বন্ধ করুন</button>
+    </div>
+  </div>
+
+  <!-- সার্চ বারকোড/QR স্ক্যানার মডাল (Single-Scan for Search) -->
+  <div class="modal-overlay" id="search-scanner-modal">
+    <div class="modal-box" style="text-align:center;">
+      <h3 style="color:#38bdf8; font-size:14px; margin-bottom:6px;">🔍 স্ক্যান করে অর্ডার খুঁজুন</h3>
+      <p style="font-size:11px; color:#94a3b8; margin-bottom:8px;">পার্সেলের বারকোড বা QR কোডটি সামনে ধরুন</p>
+      <div id="search-scanner-preview" style="width:100%; max-height:240px; border-radius:8px; overflow:hidden;"></div>
+      <button style="margin-top:10px; width:100%; background:#ef4444; color:#fff; border:none; padding:9px; border-radius:6px; font-weight:bold; cursor:pointer;" onclick="stopSearchScanner()">✕ বাতিল করুন</button>
     </div>
   </div>
 
@@ -329,6 +343,7 @@
     let loadedFilesMap = {};
     let ocrWorker = null;
     let html5QrScanner = null;
+    let searchScanner = null;
     let currentScanMode = 'return';
     let targetRowIndex = -1;
     let isScanCoolingDown = false;
@@ -649,7 +664,6 @@
       input.value = '';
     }
 
-    // টাইমিং: গ্রিন স্ক্রিন ১.৫ সেকেন্ড + ব্ল্যাকআউট ১.২ সেকেন্ড (মোট ২৭০০ms)
     let lastScannedText = "";
     let lastScanTime = 0;
 
@@ -739,13 +753,11 @@
           autoSaveAndSync();
           updateUI();
 
-          // ১.৫ সেকেন্ড গ্রিন স্ক্রিন
           setTimeout(() => {
             overlay.className = "scanner-overlay blackout";
             tick.style.display = "none";
           }, 1500);
 
-          // অতিরিক্ত ১.২ সেকেন্ড (১২০০ms) ব্ল্যাকআউট কুলডাউন
           setTimeout(() => {
             overlay.className = "scanner-overlay";
             toast.style.display = "none";
@@ -769,6 +781,47 @@
         });
       } else {
         document.getElementById("scanner-modal").style.display = "none";
+      }
+    }
+
+    // সার্চের জন্য ক্যামেরা স্ক্যানার চালু করার ফাংশন
+    function openSearchScanner() {
+      const modal = document.getElementById("search-scanner-modal");
+      modal.style.display = "flex";
+
+      searchScanner = new Html5Qrcode("search-scanner-preview");
+      searchScanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 140 } },
+        (decodedText) => {
+          const cleanCode = decodedText.trim();
+          playBeepSound();
+          if (navigator.vibrate) navigator.vibrate(80);
+
+          // সার্চ ইনপুট বক্সে কোডটি বসিয়ে ফিল্টার করা
+          document.getElementById('searchInput').value = cleanCode;
+          applyFilters();
+
+          // স্ক্যান শেষ হলে স্বয়ংক্রিয়ভাবে বন্ধ করা
+          stopSearchScanner();
+        },
+        () => {}
+      ).catch(() => {
+        alert("ক্যামেরা অন করা যায়নি!");
+        stopSearchScanner();
+      });
+    }
+
+    function stopSearchScanner() {
+      if (searchScanner) {
+        searchScanner.stop().then(() => {
+          searchScanner.clear();
+          document.getElementById("search-scanner-modal").style.display = "none";
+        }).catch(() => {
+          document.getElementById("search-scanner-modal").style.display = "none";
+        });
+      } else {
+        document.getElementById("search-scanner-modal").style.display = "none";
       }
     }
 
