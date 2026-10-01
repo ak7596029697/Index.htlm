@@ -94,14 +94,14 @@
       background: rgba(0, 0, 0, 0); z-index: 20;
     }
     .scanner-overlay.success-green {
-      background: #2e7d32 !important; /* ভিডিওর গাঢ় চমৎকার সবুজ */
+      background: #2e7d32 !important;
     }
     .scanner-overlay.blackout {
       background: #000000 !important;
     }
     .circle-tick {
       display: none; width: 72px; height: 72px; background: rgba(255, 255, 255, 0.95);
-      border-radius: 50%; display: none; align-items: center; justify-content: center;
+      border-radius: 50%; align-items: center; justify-content: center;
       box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }
     .circle-tick svg {
@@ -249,18 +249,16 @@
   <!-- ভিডিও স্টাইলের স্ক্যানার মডাল -->
   <div class="modal-overlay" id="scanner-modal">
     <div class="modal-box" style="text-align:center;">
-      <!-- স্ক্রিনে সেভ পপ-আপ মেসেজ -->
       <div id="scanToast" class="scan-toast">
-        <span style="color:#2e7d32; font-size:14px; margin-right:4px;">✓</span> Scanned Details saved successfully. Scan Next Order
+        <span style="color:#2e7d32; font-size:14px; margin-right:4px;">✓</span> Scanned Details saved successfully. Scan Next Order[span_0](start_span)[span_0](end_span)
       </div>
 
       <h3 id="scanner-title" style="color:#38bdf8; font-size:14px; margin-bottom:6px;">📷 কন্টিনিউয়াস বারকোড স্ক্যানার</h3>
-      <p style="font-size:11px; color:#94a3b8; margin-bottom:8px;">একটার পর একটা পার্সেল সামনে ধরুন</p>
+      <p style="font-size:11px; color:#94a3b8; margin-bottom:8px;">একটার পর একটা পার্সেল সামনে ধরুন[span_1](start_span)[span_1](end_span)</p>
       
       <div class="scanner-container">
         <div id="scanner-preview" style="width:100%;"></div>
         <div id="scanner-overlay" class="scanner-overlay">
-          <!-- ভিডিওর মতো সার্কেল টিক আইকন -->
           <div id="circleTick" class="circle-tick">
             <svg viewBox="0 0 24 24"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>
           </div>
@@ -355,15 +353,37 @@
     function playBeepSound() {
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.type = "sine";
-        osc.frequency.value = 1000;
-        gain.gain.value = 0.2;
-        osc.start();
-        setTimeout(() => { osc.stop(); audioCtx.close(); }, 120);
+        
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.type = "square";
+        osc1.frequency.setValueAtTime(2100, audioCtx.currentTime);
+        gain1.gain.setValueAtTime(0.35, audioCtx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+        osc1.start();
+        osc1.stop(audioCtx.currentTime + 0.08);
+
+        setTimeout(() => {
+          try {
+            const osc2 = audioCtx.createOscillator();
+            const gain2 = audioCtx.createGain();
+            osc2.type = "sine";
+            osc2.frequency.setValueAtTime(2600, audioCtx.currentTime);
+            gain2.gain.setValueAtTime(0.4, audioCtx.currentTime);
+            gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+            osc2.connect(gain2);
+            gain2.connect(audioCtx.destination);
+            osc2.start();
+            osc2.stop(audioCtx.currentTime + 0.1);
+
+            setTimeout(() => { audioCtx.close(); }, 150);
+          } catch(e) {}
+        }, 60);
+
       } catch (e) {}
     }
 
@@ -629,7 +649,7 @@
       input.value = '';
     }
 
-    // ভিডিওর অবিকল টাইমিং ও পপ-আপ অ্যানিমেশন
+    // টাইমিং: গ্রিন স্ক্রিন ১.৫ সেকেন্ড + ব্ল্যাকআউট ১.২ সেকেন্ড (মোট ২৭০০ms)
     let lastScannedText = "";
     let lastScanTime = 0;
 
@@ -651,26 +671,23 @@
 
           const now = Date.now();
           const cleanCode = decodedText.trim();
-          if (cleanCode === lastScannedText && (now - lastScanTime < 3500)) return;
+          if (cleanCode === lastScannedText && (now - lastScanTime < 2700)) return;
 
           lastScannedText = cleanCode;
           lastScanTime = now;
           isScanCoolingDown = true;
 
-          // ১. অডিও বিপ ও ভাইব্রেশন
           playBeepSound();
           if (navigator.vibrate) navigator.vibrate(100);
 
-          // ২. ফুল স্ক্রিন গ্রিন ও সাদা সার্কেল টিক
           const overlay = document.getElementById('scanner-overlay');
           const tick = document.getElementById('circleTick');
           const toast = document.getElementById('scanToast');
 
           overlay.className = "scanner-overlay success-green";
           tick.style.display = "flex";
-          toast.style.display = "block"; // সেভড মেসেজ ভেসে ওঠা
+          toast.style.display = "block";
 
-          // ৩. ডেটাবেসে এন্ট্রি
           let live = getLiveTimestamp();
           if (currentScanMode === 'dispatch') {
             let exists = extractedData.find(i => i.trackingId.toLowerCase() === cleanCode.toLowerCase());
@@ -722,18 +739,18 @@
           autoSaveAndSync();
           updateUI();
 
-          // ৪. গ্রিন স্ক্রিন পুরো ১.৫ সেকেন্ড (1500ms) থাকবে
+          // ১.৫ সেকেন্ড গ্রিন স্ক্রিন
           setTimeout(() => {
-            overlay.className = "scanner-overlay blackout"; // এরপর ক্যামেরা অন্ধকার হবে
+            overlay.className = "scanner-overlay blackout";
             tick.style.display = "none";
           }, 1500);
 
-          // ৫. আরও ২ সেকেন্ড (2000ms) অন্ধকার থাকার পর ক্যামেরা পুরোপুরি আনলক হবে
+          // অতিরিক্ত ১.২ সেকেন্ড (১২০০ms) ব্ল্যাকআউট কুলডাউন
           setTimeout(() => {
             overlay.className = "scanner-overlay";
             toast.style.display = "none";
             isScanCoolingDown = false;
-          }, 3500);
+          }, 2700);
         },
         () => {}
       ).catch(() => {
@@ -822,7 +839,7 @@
         return;
       }
 
-      const confirmed = confirm(`⚠️️ মোট ${dupCount} টি ডুপ্লিকেট রেকর্ড পাওয়া গেছে।\n\nআপনি কি নিশ্চিত যে অতিরিক্ত ডুপ্লিকেটগুলো মুছে মূল অর্ডারটি সংরক্ষণ করতে চান?\n\n[ OK ] চাপলে মুছে যাবে, [ Cancel ] চাপলে কিছুই মুছবে না।`);
+      const confirmed = confirm(`⚠️ মোট ${dupCount} টি ডুপ্লিকেট রেকর্ড পাওয়া গেছে।\n\nআপনি কি নিশ্চিত যে অতিরিক্ত ডুপ্লিকেটগুলো মুছে মূল অর্ডারটি সংরক্ষণ করতে চান?\n\n[ OK ] চাপলে মুছে যাবে, [ Cancel ] চাপলে কিছুই মুছবে না।`);
 
       if (!confirmed) return;
 
